@@ -17,7 +17,7 @@ import {
 } from "react-icons/fi";
 import Lenis from "@studio-freight/lenis";
 
-import AuthModal from "../../components/AuthModal";
+import AuthModal from "../../components/auth/AuthModal";
 
 // components
 import Navbar from "./components/Navbar";
