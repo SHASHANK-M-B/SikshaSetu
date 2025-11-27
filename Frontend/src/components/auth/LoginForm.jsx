@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiLock, FiKey } from "react-icons/fi";
 import InputField from "./InputField";
+import { dummyUsers } from "./dummyUsers";
 
 const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
     const navigate = useNavigate();
 
     const [formData, setFormData] = useState({
-        role: "",          // NEW
+        role: "organization",     // NEW FIELD
         orgCode: "",
         email: "",
         password: "",
@@ -26,7 +27,7 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
 
     const validate = () => {
         const newErrors = {};
-        if (!formData.role.trim()) newErrors.role = "Select your role.";
+        if (!formData.role) newErrors.role = "Select a role";
         if (!formData.orgCode.trim()) newErrors.orgCode = "Organization code is required.";
         if (!formData.email.trim()) newErrors.email = "Email is required.";
         if (!formData.password.trim()) newErrors.password = "Password is required.";
@@ -34,75 +35,60 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const submit = async (e) => {
+    const submit = (e) => {
         e.preventDefault();
         if (!validate()) {
             showToast("error", "Please fill all required fields.");
             return;
         }
 
-        try {
-            const res = await fetch("http://localhost:5000/api/auth/org-login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    role: formData.role,       // NEW
-                    orgCode: formData.orgCode,
-                    email: formData.email,
-                    password: formData.password,
-                }),
-            });
+        // Check in dummyUsers
+        const user = dummyUsers.find(
+            (u) =>
+                u.role === formData.role &&             // MATCH ROLE
+                u.orgCode === formData.orgCode &&
+                u.email === formData.email &&
+                u.password === formData.password
+        );
 
-            const data = await res.json();
-
-            if (!data.success) {
-                showToast("error", data.message);
-                return;
-            }
-
-            // SAVE SESSION
-            localStorage.setItem("org_token", data.token);
-            localStorage.setItem("org_user", JSON.stringify(data.org));
-
-            showToast("success", "Login Successful!");
-
-            navigate("/organization/dashboard");
-            onClose();
-        } catch (err) {
-            showToast("error", "Server error");
+        if (!user) {
+            showToast("error", "Invalid credentials or role mismatch.");
+            return;
         }
+
+        showToast("success", `Logged in as ${user.role.toUpperCase()}`);
+
+        // Redirect by role
+        if (user.role === "organization") navigate("/organization/dashboard");
+        else if (user.role === "teacher") navigate("/teacher/dashboard");
+        else if (user.role === "student") navigate("/student/dashboard");
+
+        onClose();
     };
 
     return (
         <form onSubmit={submit} className="space-y-4 mt-4 text-xs md:text-sm">
 
-            {/* ROLE SELECTOR */}
+            {/* ROLE DROPDOWN */}
             <div>
-                <label className="block font-medium mb-1 text-gray-200">
-                    Login As
-                </label>
+                <label className="text-gray-300 text-xs font-medium">Select Role</label>
                 <select
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className={`w-full p-3 rounded-lg bg-gray-900/40 border ${errors.role ? "border-red-500" : "border-gray-700"
-                        } text-gray-300 focus:border-cyan-500 outline-none`}
+                    className="w-full mt-1 p-3 rounded-lg bg-gray-800 text-gray-200 border border-gray-600"
                 >
-                    <option value="">Select Role</option>
                     <option value="organization">Organization</option>
                     <option value="teacher">Teacher</option>
                     <option value="student">Student</option>
                 </select>
-
-                {errors.role && (
-                    <p className="text-red-400 text-[10px] mt-1">{errors.role}</p>
-                )}
+                {errors.role && <p className="text-red-400 text-xs mt-1">{errors.role}</p>}
             </div>
 
             <InputField
                 label="Organization Code"
                 name="orgCode"
-                placeholder="Example: PRES-15"
+                placeholder="Ex: ORG123"
                 value={formData.orgCode}
                 onChange={handleChange}
                 error={errors.orgCode}
@@ -187,4 +173,4 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
     );
 };
 
-export default LoginForm;
+export default LoginForm;
