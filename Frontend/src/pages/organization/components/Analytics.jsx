@@ -22,21 +22,25 @@ export default function Analytics({
 
     const avgAttendance = Math.round(
         students.reduce((s, st) => s + (st.attendance || 0), 0) /
-        Math.max(1, students.length)
+            Math.max(1, students.length)
     );
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+
+            {/* ===========================
+                HEADER — MOBILE FRIENDLY
+            ============================ */}
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <h2 className="text-2xl font-bold text-purple-700 flex items-center gap-2">
                     <FiBarChart2 /> Organization Analytics
                 </h2>
 
+                {/* On mobile → full width, below title */}
                 <select
                     value={analyticsRange}
                     onChange={(e) => setAnalyticsRange(e.target.value)}
-                    className="p-2 border rounded"
+                    className="p-2 border rounded w-full md:w-auto"
                 >
                     <option value="7d">Last 7 days</option>
                     <option value="30d">Last 30 days</option>
@@ -44,7 +48,9 @@ export default function Analytics({
                 </select>
             </div>
 
-            {/* Stat Cards */}
+            {/* ===========================
+                STAT CARDS
+            ============================ */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-white border rounded-lg">
                     <p className="text-sm text-gray-500">Top Teacher</p>
@@ -68,7 +74,9 @@ export default function Analytics({
                 </div>
             </div>
 
-            {/* Trend Graphs */}
+            {/* ===========================
+                TREND CHARTS (MOBILE STACK)
+            ============================ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <TrendCard
                     title="Attendance Trend"
@@ -80,7 +88,9 @@ export default function Analytics({
                 />
             </div>
 
-            {/* Summary Cards */}
+            {/* ===========================
+                SUMMARY CARDS
+            ============================ */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-white border rounded-lg">
                     <p className="text-sm text-gray-500">Total Teachers</p>

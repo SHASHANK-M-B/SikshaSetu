@@ -840,8 +840,7 @@
 // - Provide a sample Node/Express backend (endpoints + file upload)
 // - Add authentication + JWT flow
 // */
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     FiHome,
     FiUsers,
@@ -849,10 +848,11 @@ import {
     FiBarChart2,
     FiLogOut,
     FiBriefcase,
-    FiMail, // Added for aesthetic consistency with new invite button style
+    FiMail,
+    FiMenu,
+    FiX
 } from "react-icons/fi";
 
-// Import the required components (assuming these exist from the previous request)
 import Overview from "./components/Overview";
 import Analytics from "./components/Analytics";
 import TeacherManagement from "./components/TeacherManagement";
@@ -860,9 +860,7 @@ import StudentManagement from "./components/StudentManagement";
 import StudentModal from "./components/StudentModal";
 import TeacherModal from "./components/TeacherModal";
 
-// --- DUMMY DATA AND UTILITY FUNCTIONS ---
-
-// Helper functions for persistence/mocking data in localStorage
+// localStorage helpers
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const load = (k, f) => {
     try {
@@ -873,6 +871,7 @@ const load = (k, f) => {
     }
 };
 
+// Dummy initial data
 const initialTeachers = [
     { id: 1, name: "Dr. Anya Sharma", email: "a.sharma@edu.in", status: "Active", sessions: 45, reactions: 200, doubts: 50 },
     { id: 2, name: "Mr. Rajeev Varma", email: "r.varma@edu.in", status: "Inactive", sessions: 12, reactions: 50, doubts: 10 },
@@ -896,89 +895,74 @@ const initialAnalyticsData = {
     avgAttendance: 86,
     topTeacher: "Dr. Anya Sharma",
     topCourse: "Basic Mathematics",
-    attendanceTrend: [65, 70, 75, 80, 85, 86, 90], // last 7 days
-    quizTrend: [120, 110, 150, 130, 140, 160, 170], // last 7 days
+    attendanceTrend: [65, 70, 75, 80, 85, 86, 90],
+    quizTrend: [120, 110, 150, 130, 140, 160, 170],
 };
 
+// Default logo (you can replace URL)
+const DEFAULT_ORG_LOGO = "https://i.ibb.co/4Z1qZ4D/default-org.png";
 
-// --- MAIN DASHBOARD COMPONENT ---
-
-export default function OrganizationDashboard() {
-    // STATE MANAGEMENT
-    const [tab, setTab] = useState(
-        () => load("org_dashboard_tab", "overview")
-    );
-    const [teachers, setTeachers] = useState(
-        () => load("teachers_data", initialTeachers)
-    );
-    const [students, setStudents] = useState(
-        () => load("students_data", initialStudents)
-    );
+export default function OrganizationDashboard({
+    organizationName = "Presidency University",
+}) {
+    const [tab, setTab] = useState(() => load("org_dashboard_tab", "overview"));
+    const [teachers, setTeachers] = useState(() => load("teachers_data", initialTeachers));
+    const [students, setStudents] = useState(() => load("students_data", initialStudents));
     const [courses] = useState(initialCourses);
     const [analyticsData] = useState(initialAnalyticsData);
+
     const [analyticsRange, setAnalyticsRange] = useState("7d");
-    
-    // MODAL STATE FOR VIEWING DETAILS
+
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [selectedTeacher, setSelectedTeacher] = useState(null);
 
-    // PERSISTENCE EFFECTS
-    useEffect(() => {
-        save("org_dashboard_tab", tab);
-    }, [tab]);
+    // MOBILE SIDEBAR STATE
+    const [mobileMenu, setMobileMenu] = useState(false);
 
-    useEffect(() => {
-        save("teachers_data", teachers);
-    }, [teachers]);
+    // ORGANIZATION LOGO (persisted in localStorage)
+    const [orgLogo, setOrgLogo] = useState(() => load("org_logo", DEFAULT_ORG_LOGO));
 
-    useEffect(() => {
-        save("students_data", students);
-    }, [students]);
+    // DP Modal (Option B)
+    const [showDpModal, setShowDpModal] = useState(false);
+    // tempLogo: used for preview inside modal before saving
+    const [tempLogo, setTempLogo] = useState(orgLogo);
 
-    // HANDLER FUNCTIONS
+    // file input ref for change photo action
+    const fileRef = useRef(null);
+
+    useEffect(() => save("org_dashboard_tab", tab), [tab]);
+    useEffect(() => save("teachers_data", teachers), [teachers]);
+    useEffect(() => save("students_data", students), [students]);
+    useEffect(() => save("org_logo", orgLogo), [orgLogo]); // persist logo on change
 
     const removeTeacher = (id) => {
-        if (window.confirm("Are you sure you want to remove this teacher?")) {
+        if (window.confirm("Are you sure?"))
             setTeachers((prev) => prev.filter((t) => t.id !== id));
-        }
     };
 
     const removeStudent = (id) => {
-        if (window.confirm("Are you sure you want to remove this student?")) {
+        if (window.confirm("Are you sure?"))
             setStudents((prev) => prev.filter((s) => s.id !== id));
-        }
     };
 
-    // --- Student Modal Logic ---
-    const viewStudentDetails = (student) => {
-        setSelectedStudent(student);
-    };
+    const viewStudentDetails = (s) => setSelectedStudent(s);
+    const closeStudentModal = () => setSelectedStudent(null);
 
-    const closeStudentModal = () => {
-        setSelectedStudent(null);
-    };
+    const viewTeacherDetails = (t) => setSelectedTeacher(t);
+    const closeTeacherModal = () => setSelectedTeacher(null);
 
-    // --- Teacher Modal Logic ---
-    const viewTeacherDetails = (teacher) => {
-        setSelectedTeacher(teacher);
-    };
-
-    const closeTeacherModal = () => {
-        setSelectedTeacher(null);
-    };
-
-    // Handles invite actions by navigating to the relevant management tab
     const openInvite = (mode) => {
-        if (mode === "teacher") {
-            setTab("teachers");
-            // NOTE: In a full implementation, this might open an InviteModal component
-        } else if (mode === "student") {
-            setTab("students");
-            // NOTE: In a full implementation, this might open an InviteModal component
-        }
+        if (mode === "teacher") setTab("teachers");
+        else if (mode === "student") setTab("students");
     };
 
-    // UI RENDER HELPERS
+    const navItems = [
+        { id: "overview", name: "Overview", icon: FiHome },
+        { id: "analytics", name: "Analytics", icon: FiBarChart2 },
+        { id: "teachers", name: "Teachers", icon: FiUsers },
+        { id: "students", name: "Students", icon: FiUserCheck },
+    ];
+
     const renderContent = () => {
         const commonProps = {
             teachers,
@@ -987,15 +971,14 @@ export default function OrganizationDashboard() {
             totalTeachers: teachers.length,
             totalStudents: students.length,
             totalCourses: courses.length,
-            totalSessions: courses.reduce((sum, c) => sum + c.sessions, 0),
-            setTab, // Passed to Overview for navigation
-            openInvite, 
+            totalSessions: courses.reduce((a, c) => a + c.sessions, 0),
+            setTab,
+            openInvite,
         };
 
         switch (tab) {
             case "overview":
                 return <Overview {...commonProps} />;
-
             case "analytics":
                 return (
                     <Analytics
@@ -1005,7 +988,6 @@ export default function OrganizationDashboard() {
                         setAnalyticsRange={setAnalyticsRange}
                     />
                 );
-
             case "teachers":
                 return (
                     <TeacherManagement
@@ -1016,7 +998,6 @@ export default function OrganizationDashboard() {
                         openInvite={openInvite}
                     />
                 );
-
             case "students":
                 return (
                     <StudentManagement
@@ -1026,31 +1007,87 @@ export default function OrganizationDashboard() {
                         openInvite={openInvite}
                     />
                 );
-
             default:
                 return <Overview {...commonProps} />;
         }
     };
 
-    const navItems = [
-        { id: "overview", name: "Overview", icon: FiHome },
-        { id: "analytics", name: "Analytics", icon: FiBarChart2 },
-        { id: "teachers", name: "Teachers", icon: FiUsers },
-        { id: "students", name: "Students", icon: FiUserCheck },
-    ];
+    // Open DP modal (prepare temp state)
+    const openDpModal = () => {
+        setTempLogo(orgLogo || DEFAULT_ORG_LOGO);
+        setShowDpModal(true);
+    };
 
-    // --- JSX STRUCTURE ---
+    // Handle file chosen — convert to base64 for preview (tempLogo)
+    const handleFileChange = (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            setTempLogo(ev.target.result);
+        };
+        reader.readAsDataURL(f);
+    };
+
+    // Save tempLogo as orgLogo and persist (already persisted by useEffect)
+    const saveDp = () => {
+        setOrgLogo(tempLogo || DEFAULT_ORG_LOGO);
+        setShowDpModal(false);
+    };
+
+    // Remove photo in modal (sets tempLogo to default)
+    const removeDp = () => {
+        setTempLogo(DEFAULT_ORG_LOGO);
+    };
+
+    // Cancel modal (discard temp)
+    const cancelDp = () => {
+        setTempLogo(orgLogo);
+        setShowDpModal(false);
+    };
+
     return (
-        <div className="flex min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50">
-            
-            {/* Sidebar (Navigation) - Fixed Desktop UI with new colors */}
-            <div
-                className="w-64 bg-gradient-to-b from-purple-800 to-purple-700 text-white shadow-xl z-30 flex flex-col flex-shrink-0 h-screen sticky top-0"
-            >
-                <div className="p-6 h-20 flex items-center border-b border-white/10">
-                    <h1 className="text-2xl font-extrabold flex items-center gap-2">
-                        <FiBriefcase className="text-pink-300" /> <span className="text-pink-300">Org</span>Admin
+        <div className="flex min-h-screen bg-gray-50">
+
+            {/* MOBILE TOP BAR */}
+            <div className="lg:hidden fixed top-0 left-0 w-full h-16 bg-white shadow flex items-center justify-between px-4 z-40">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => openDpModal()} className="w-10 h-10 rounded-full overflow-hidden border-2 border-purple-600 flex-shrink-0">
+                        <img src={orgLogo || DEFAULT_ORG_LOGO} alt="Org" className="w-full h-full object-cover" />
+                    </button>
+
+                    <h1 className="text-lg font-semibold text-purple-700 flex items-center gap-2">
+                        <FiBriefcase /> {organizationName}
                     </h1>
+                </div>
+
+                <button
+                    onClick={() => setMobileMenu(true)}
+                    className="text-purple-700 text-3xl"
+                >
+                    <FiMenu />
+                </button>
+            </div>
+
+            {/* RIGHT-SIDE MOBILE SLIDE MENU */}
+            <div
+                className={`fixed top-0 right-0 h-full w-64 bg-gradient-to-b from-purple-800 to-purple-700 text-white shadow-xl transform transition-transform duration-300 z-50 lg:hidden
+                ${mobileMenu ? "translate-x-0" : "translate-x-full"}`}
+            >
+                <div className="p-6 flex items-center justify-between border-b border-white/10">
+                    <div className="flex items-center gap-3">
+                        <button onClick={openDpModal} className="w-10 h-10 rounded-full overflow-hidden border-2 border-white">
+                            <img src={orgLogo || DEFAULT_ORG_LOGO} alt="Org" className="w-full h-full object-cover" />
+                        </button>
+                        <h1 className="text-2xl font-bold">{organizationName}</h1>
+                    </div>
+
+                    <button
+                        onClick={() => setMobileMenu(false)}
+                        className="text-white text-3xl"
+                    >
+                        <FiX />
+                    </button>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2">
@@ -1059,27 +1096,25 @@ export default function OrganizationDashboard() {
                             key={item.id}
                             onClick={() => {
                                 setTab(item.id);
+                                setMobileMenu(false);
                             }}
                             className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${
-                                tab === item.id
-                                    ? "bg-white/10" // Active state color
-                                    : "hover:bg-white/5" // Hover state color
+                                tab === item.id ? "bg-white/10" : "hover:bg-white/5"
                             }`}
                         >
-                            <item.icon size={20} />
-                            {item.name}
+                            <item.icon size={20} /> {item.name}
                         </button>
                     ))}
                 </nav>
 
-                {/* Invite Button (styled like the example) */}
                 <div className="p-4 border-t border-white/10">
-                    <button 
-                        onClick={() => openInvite("teacher")} 
+                    {/* <button
+                        onClick={() => openInvite("teacher")}
                         className="w-full px-4 py-2 bg-pink-500 rounded-lg text-white font-semibold flex items-center gap-2 justify-center hover:brightness-105"
                     >
                         <FiMail /> Invite User
-                    </button>
+                    </button> */}
+
                     <button className="w-full flex items-center gap-3 p-3 mt-2 text-red-300 hover:bg-white/5 rounded-lg font-medium transition-colors">
                         <FiLogOut size={20} />
                         Logout
@@ -1087,16 +1122,63 @@ export default function OrganizationDashboard() {
                 </div>
             </div>
 
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto p-6 lg:p-10">
+            {/* DESKTOP SIDEBAR */}
+            <div className="hidden lg:flex w-64 bg-gradient-to-b from-purple-800 to-purple-700 text-white shadow-xl z-30 flex-col h-screen sticky top-0">
+                <div className="p-6 h-20 flex items-center gap-3 border-b border-white/10">
+
+                    <button onClick={openDpModal} className="w-12 h-12 rounded-full overflow-hidden border-2 border-white flex-shrink-0">
+                        <img src={orgLogo || DEFAULT_ORG_LOGO} alt="Org" className="w-full h-full object-cover" />
+                    </button>
+
+                    <div>
+                        <h1 className="text-xl font-extrabold">
+                            {organizationName}
+                        </h1>
+                        <p className="text-xs text-white/80">Organization</p>
+                    </div>
+                </div>
+
+                <nav className="flex-1 p-4 space-y-2">
+                    {navItems.map((item) => (
+                        <button
+                            key={item.id}
+                            onClick={() => setTab(item.id)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${
+                                tab === item.id ? "bg-white/10" : "hover:bg-white/5"
+                            }`}
+                        >
+                            <item.icon size={20} /> {item.name}
+                        </button>
+                    ))}
+                </nav>
+
+                <div className="p-4 border-t border-white/10">
+                    {/* <button
+                        onClick={() => openInvite("teacher")}
+                        className="w-full px-4 py-2 bg-pink-500 rounded-lg text-white font-semibold flex items-center gap-2 justify-center hover:brightness-105"
+                    >
+                        <FiMail /> Invite User
+                    </button> */}
+
+                    <button className="w-full flex items-center gap-3 p-3 mt-2 text-red-300 hover:bg-white/5 rounded-lg font-medium transition-colors">
+                        <FiLogOut size={20} />
+                        Logout
+                    </button>
+                </div>
+            </div>
+
+            {/* MAIN CONTENT */}
+            <main className="flex-1 overflow-y-auto p-6 lg:p-10 mt-16 lg:mt-0">
                 <div className="flex items-center justify-between mb-6">
                     <h1 className="text-3xl font-extrabold text-gray-800 capitalize">
-                        {tab.replace(/([A-Z])/g, " $1")} Dashboard
+                        {tab.replace(/([A-Z])/g, " $1")}
                     </h1>
-                    {/* Placeholder for user profile if needed */}
+
                     <div className="hidden lg:flex items-center gap-4">
-                        <div className="text-sm text-gray-500">Org Admin</div>
-                        <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold shadow">OA</div>
+                        <div className="text-sm text-gray-500">{organizationName}</div>
+                        <button onClick={openDpModal} className="w-10 h-10 rounded-full overflow-hidden border shadow">
+                            <img src={orgLogo || DEFAULT_ORG_LOGO} alt="Org" className="w-full h-full object-cover" />
+                        </button>
                     </div>
                 </div>
 
@@ -1105,19 +1187,81 @@ export default function OrganizationDashboard() {
                 </div>
             </main>
 
-            {/* Modals (Student and Teacher) */}
             {selectedStudent && (
-                <StudentModal
-                    student={selectedStudent}
-                    onClose={closeStudentModal} 
-                />
+                <StudentModal student={selectedStudent} onClose={closeStudentModal} />
             )}
+
             {selectedTeacher && (
-                <TeacherModal
-                    teacher={selectedTeacher}
-                    onClose={closeTeacherModal}
-                />
+                <TeacherModal teacher={selectedTeacher} onClose={closeTeacherModal} />
             )}
+
+            {/* DP Modal (Option B: popup with preview / change / remove / save / cancel) */}
+            {showDpModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5">
+                        <div className="flex items-start justify-between gap-4">
+                            <h3 className="text-lg font-semibold">Organization Photo</h3>
+                            <button onClick={cancelDp} className="text-gray-600 hover:text-black">
+                                <FiX size={22} />
+                            </button>
+                        </div>
+
+                        <div className="mt-4 flex flex-col items-center gap-4">
+                            <div className="w-32 h-32 rounded-full overflow-hidden border-2 border-gray-200 shadow-sm">
+                                <img
+                                    src={tempLogo || DEFAULT_ORG_LOGO}
+                                    alt="Preview"
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+
+                            <div className="text-sm text-gray-600 text-center">
+                                This photo will be used across the dashboard (sidebar, top bar, mobile).
+                            </div>
+
+                            <div className="flex gap-2 w-full">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    ref={fileRef}
+                                    className="hidden"
+                                    onChange={handleFileChange}
+                                />
+                                <button
+                                    onClick={() => fileRef.current?.click()}
+                                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium"
+                                >
+                                    Change Photo
+                                </button>
+
+                                <button
+                                    onClick={removeDp}
+                                    className="px-4 py-2 bg-red-50 border border-red-200 text-red-700 rounded-lg"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+
+                            <div className="flex gap-2 w-full mt-2">
+                                <button
+                                    onClick={saveDp}
+                                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
+                                >
+                                    Save
+                                </button>
+                                <button
+                                    onClick={cancelDp}
+                                    className="flex-1 px-4 py-2 bg-gray-100 rounded-lg"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }
