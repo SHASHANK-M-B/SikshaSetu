@@ -1,137 +1,28 @@
-
-
-// import React, { useState } from "react";
-// import { FiUsers, FiPlusCircle, FiTrash2 } from "react-icons/fi";
-
-// export default function TeacherManagement({
-//     teachers,
-//     setTeachers,
-//     removeTeacher,
-//     viewTeacherDetails,
-//     openInvite,
-// }) {
-//     const [name, setName] = useState("");
-//     const [email, setEmail] = useState("");
-
-//     const addTeacher = (e) => {
-//         e.preventDefault();
-
-//         const newId = Math.max(0, ...teachers.map((t) => t.id)) + 1;
-
-//         const newTeacher = {
-//             id: newId,
-//             name,
-//             email,
-//             status: "Active",
-//             sessions: 0,
-//             reactions: 0,
-//             doubts: 0,
-//         };
-
-//         setTeachers((prev) => [newTeacher, ...prev]);
-
-//         setName("");
-//         setEmail("");
-//     };
-
-//     return (
-//         <div className="space-y-6">
-//             {/* Header */}
-//             <div className="flex items-center justify-between">
-//                 <h2 className="text-2xl font-bold text-purple-700 flex items-center gap-2">
-//                     <FiUsers /> Manage Teachers ({teachers.length})
-//                 </h2>
-
-//                 <button
-//                     onClick={() => openInvite("teacher")}
-//                     className="px-3 py-2 bg-pink-600 text-white rounded"
-//                 >
-//                     Invite
-//                 </button>
-//             </div>
-
-//             {/* Add New Teacher */}
-//             <form
-//                 onSubmit={addTeacher}
-//                 className="flex gap-3 flex-wrap items-end bg-white p-4 rounded border"
-//             >
-//                 <input
-//                     value={name}
-//                     onChange={(e) => setName(e.target.value)}
-//                     placeholder="Teacher Name"
-//                     required
-//                     className="p-2 border rounded flex-1 min-w-[180px]"
-//                 />
-
-//                 <input
-//                     value={email}
-//                     onChange={(e) => setEmail(e.target.value)}
-//                     placeholder="Teacher Email"
-//                     required
-//                     className="p-2 border rounded flex-1 min-w-[220px]"
-//                 />
-
-//                 <button
-//                     type="submit"
-//                     className="px-4 py-2 bg-purple-600 text-white rounded flex items-center gap-1"
-//                 >
-//                     <FiPlusCircle /> Add
-//                 </button>
-//             </form>
-
-//             {/* Teachers List */}
-//             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//                 {teachers.map((teacher) => (
-//                     <div
-//                         key={teacher.id}
-//                         className="p-4 bg-gray-50 border rounded-lg flex items-center justify-between"
-//                     >
-//                         <div>
-//                             <div className="font-semibold">{teacher.name}</div>
-//                             <div className="text-sm text-gray-500">
-//                                 {teacher.email}
-//                             </div>
-//                             <div className="text-xs mt-1">
-//                                 Sessions:{" "}
-//                                 <span className="font-medium">
-//                                     {teacher.sessions}
-//                                 </span>
-//                             </div>
-//                         </div>
-
-//                         <div className="flex items-center gap-2">
-//                             <button
-//                                 onClick={() => viewTeacherDetails(teacher)}
-//                                 className="px-3 py-2 bg-white border rounded"
-//                             >
-//                                 View
-//                             </button>
-
-//                             <button
-//                                 onClick={() => removeTeacher(teacher.id)}
-//                                 className="p-2 bg-red-100 text-red-600 rounded-full"
-//                             >
-//                                 <FiTrash2 />
-//                             </button>
-//                         </div>
-//                     </div>
-//                 ))}
-//             </div>
-//         </div>
-//     );
-// }
-
-
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { FiUsers, FiPlusCircle, FiTrash2 } from "react-icons/fi";
 
+/**
+ * TeacherManagement
+ *
+ * Props:
+ *  - teachers (array)
+ *  - setTeachers (fn)
+ *  - removeTeacher (fn)
+ *  - viewTeacherDetails (fn) // optional, will be called when viewing details
+ *  - pendingRequests (array) // optional external requests
+ *  - onAcceptRequest (fn) // optional callback when accept pressed
+ *  - onDeclineRequest (fn) // optional callback when decline pressed
+ */
 export default function TeacherManagement({
   teachers = [],
   setTeachers = () => {},
   removeTeacher = () => {},
-  viewTeacherDetails = () => {}, // will show courses handled by expert
+  viewTeacherDetails = null, // <-- parent may pass this
+  pendingRequests: externalPendingRequests = [],
+  onAcceptRequest = null,
+  onDeclineRequest = null,
 }) {
-  // Local form states
+  // Local form states for adding experts manually
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("AI");
@@ -140,7 +31,52 @@ export default function TeacherManagement({
   const CATEGORIES = ["All", ...SUBJECTS];
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  // Add Expert Locally Only
+  // Dummy initial pending requests (will be used if parent didn't pass any)
+  const DUMMY_REQUESTS = [
+    {
+      id: "r-101",
+      name: "Dr. Asha Rao",
+      email: "asha.rao@example.com",
+      course: "AI",
+      message: "Experienced ML trainer, 5 years teaching experience.",
+      courses: ["Intro to AI", "ML Basics"],
+    },
+    {
+      id: "r-102",
+      name: "Mr. Vikram Singh",
+      email: "vikram.singh@example.com",
+      course: "VLSI",
+      message: "Industry expert in chip design.",
+      courses: ["VLSI Design I", "Digital Circuits"],
+    },
+    {
+      id: "r-103",
+      name: "Ms. Priya Menon",
+      email: "priya.menon@example.com",
+      course: "Renewable Energy",
+      message: "Academic background in solar systems.",
+      courses: ["Renewables 101"],
+    },
+  ];
+
+  // Local pending requests state (prefilled with external or dummy)
+  const [localPending, setLocalPending] = useState(
+    Array.isArray(externalPendingRequests) && externalPendingRequests.length > 0
+      ? externalPendingRequests
+      : DUMMY_REQUESTS
+  );
+
+  // Keep local pending in sync if parent passes updated list later
+  useEffect(() => {
+    if (Array.isArray(externalPendingRequests) && externalPendingRequests.length > 0) {
+      setLocalPending(externalPendingRequests);
+    }
+  }, [externalPendingRequests]);
+
+  // Modal / details state (for local View modal)
+  const [detailExpert, setDetailExpert] = useState(null);
+
+  // Add Expert Locally Only (from the form)
   const addTeacher = (e) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
@@ -153,7 +89,7 @@ export default function TeacherManagement({
       email,
       subject,
       sessions: 0,
-      courses: ["Course 1", "Course 2"], // optional sample
+      courses: ["Course 1", "Course 2"],
     };
 
     setTeachers((prev) => [newExpert, ...(Array.isArray(prev) ? prev : teachers)]);
@@ -165,18 +101,74 @@ export default function TeacherManagement({
     alert("Expert added!");
   };
 
-  // Filtering
+  // Filtering experts by category
   const filtered =
     selectedCategory === "All"
       ? teachers
       : teachers.filter((exp) => exp.subject === selectedCategory);
 
   // Dummy Stats
-  const dummyStats = {
-    totalExperts: teachers.length,
-    activeExperts: 20,
-    aiExperts: teachers.filter((t) => t.subject === "AI").length,
+  const dummyStats = useMemo(
+    () => ({
+      totalExperts: teachers.length,
+      activeExperts: 20,
+      aiExperts: teachers.filter((t) => t.subject === "AI").length,
+    }),
+    [teachers]
+  );
+
+  // Accept a pending request
+  const acceptRequest = (request) => {
+    try {
+      if (typeof onAcceptRequest === "function") onAcceptRequest(request);
+    } catch (e) {
+      console.error("onAcceptRequest error:", e);
+    }
+
+    // Add expert to teachers locally
+    const newId = Math.max(0, ...teachers.map((t) => Number(t.id) || 0)) + 1;
+    const newExpert = {
+      id: newId,
+      name: request.name,
+      email: request.email,
+      subject: request.course || request.subject || "Unknown",
+      sessions: 0,
+      courses: request.courses ?? [],
+    };
+    setTeachers((prev) => [newExpert, ...(Array.isArray(prev) ? prev : teachers)]);
+
+    setLocalPending((prev) => prev.filter((r) => r.id !== request.id));
   };
+
+  // Decline a pending request
+  const declineRequest = (request) => {
+    try {
+      if (typeof onDeclineRequest === "function") onDeclineRequest(request);
+    } catch (e) {
+      console.error("onDeclineRequest error:", e);
+    }
+
+    setLocalPending((prev) => prev.filter((r) => r.id !== request.id));
+  };
+
+  // View handler: only open local modal if parent DOES NOT provide viewTeacherDetails
+  const handleView = (expert) => {
+    // If parent passed a handler, call it and DO NOT open local modal (prevents duplicate)
+    if (typeof viewTeacherDetails === "function") {
+      try {
+        viewTeacherDetails(expert);
+      } catch (e) {
+        console.error("viewTeacherDetails error:", e);
+      }
+      return;
+    }
+
+    // Otherwise open local modal
+    setDetailExpert(expert);
+  };
+
+  // Close detail modal
+  const closeDetail = () => setDetailExpert(null);
 
   return (
     <div className="space-y-6 px-4 py-6">
@@ -209,7 +201,6 @@ export default function TeacherManagement({
         <h2 className="text-2xl font-bold text-purple-700 flex items-center gap-2">
           <FiUsers /> Experts ({filtered.length})
         </h2>
-        {/* Invite Button Removed */}
       </div>
 
       {/* ===== Category Filter ===== */}
@@ -278,9 +269,7 @@ export default function TeacherManagement({
       {/* ===== Experts Grid ===== */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.length === 0 ? (
-          <div className="p-4 bg-yellow-50 border rounded text-gray-700">
-            No experts found.
-          </div>
+          <div className="p-4 bg-yellow-50 border rounded text-gray-700">No experts found.</div>
         ) : (
           filtered.map((expert) => (
             <div
@@ -288,26 +277,21 @@ export default function TeacherManagement({
               className="p-4 bg-gray-50 border rounded-lg flex flex-col sm:flex-row justify-between gap-3"
             >
               <div className="flex-1">
-                <div className="font-semibold text-base">
-                  Expert Name: {expert.name}
-                </div>
+                <div className="font-semibold text-base">Expert Name: {expert.name}</div>
                 <div className="text-sm text-gray-500 truncate">{expert.email}</div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                   <div>
-                    Sessions:{" "}
-                    <span className="font-medium">{expert.sessions ?? 0}</span>
+                    Sessions: <span className="font-medium">{expert.sessions ?? 0}</span>
                   </div>
 
-                  <div className="px-2 py-0.5 border rounded text-xs">
-                    {expert.subject}
-                  </div>
+                  <div className="px-2 py-0.5 border rounded text-xs">{expert.subject}</div>
                 </div>
               </div>
 
               <div className="flex sm:flex-col items-center sm:items-end gap-2">
                 <button
-                  onClick={() => viewTeacherDetails(expert)} // SHOW COURSES HANDLED
+                  onClick={() => handleView(expert)}
                   className="w-full sm:w-auto px-3 py-2 bg-white border rounded text-sm"
                 >
                   View
@@ -324,6 +308,99 @@ export default function TeacherManagement({
           ))
         )}
       </div>
+
+      {/* ===== Horizontal Pending Requests Menu ===== */}
+      <div className="mt-6">
+        <h3 className="text-lg font-semibold mb-3">New Teacher Requests</h3>
+
+        {localPending.length === 0 ? (
+          <div className="p-4 bg-gray-50 border rounded text-gray-600">No new requests.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="flex gap-4 pb-2">
+              {localPending.map((req) => (
+                <div
+                  key={req.id}
+                  className="min-w-[300px] p-4 bg-white border rounded-lg flex-shrink-0 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="font-semibold text-base">{req.name}</div>
+                    <div className="text-sm text-gray-500 truncate">{req.email}</div>
+
+                    <div className="mt-3 text-sm">
+                      <div className="text-xs text-gray-400">Course</div>
+                      <div className="px-2 py-1 mt-1 inline-block border rounded text-sm bg-gray-50">
+                        {req.course ?? req.subject ?? "—"}
+                      </div>
+
+                      {req.message && (
+                        <div className="mt-2 text-xs text-gray-600">{req.message}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => acceptRequest(req)}
+                      className="flex-1 px-3 py-2 bg-green-600 text-white rounded"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => declineRequest(req)}
+                      className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded border"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ===== Detail Modal (shows courses for selected expert) ===== */}
+      {detailExpert && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <h4 className="text-xl font-semibold">{detailExpert.name}</h4>
+                <div className="text-sm text-gray-500">{detailExpert.email}</div>
+              </div>
+              <button
+                onClick={closeDetail}
+                className="text-gray-500 hover:text-gray-700 ml-2"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-sm text-gray-600 mb-2">Courses handled:</div>
+              {Array.isArray(detailExpert.courses) && detailExpert.courses.length > 0 ? (
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  {detailExpert.courses.map((c, i) => (
+                    <li key={i} className="text-gray-700">{c}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-sm text-gray-500">No courses listed.</div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={closeDetail}
+                className="px-3 py-2 bg-gray-100 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
