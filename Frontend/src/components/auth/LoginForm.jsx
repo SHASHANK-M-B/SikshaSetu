@@ -49,16 +49,29 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
                 u.role === role
         );
 
-        if (!user) {
-            showToast("error", "Invalid credentials for selected role.");
-            return;
+        // Navigate to dashboard based on role, even if login fails
+        if (role === "organization") {
+            if (user) {
+                showToast("success", `Logged in as ${role.toUpperCase()}`);
+            } else {
+                showToast("error", "Invalid credentials, but navigating to organization dashboard.");
+            }
+            navigate("/organization/dashboard");
+        } else if (role === "student") {
+            if (user) {
+                showToast("success", `Logged in as ${role.toUpperCase()}`);
+            } else {
+                showToast("error", "Invalid credentials, but navigating to student dashboard.");
+            }
+            navigate("/student/dashboard");
+        } else if (role === "teacher") {
+            if (user) {
+                showToast("success", `Logged in as ${role.toUpperCase()}`);
+            } else {
+                showToast("error", "Invalid credentials, but navigating to teacher dashboard.");
+            }
+            navigate("/teacher/dashboard");
         }
-
-        showToast("success", `Logged in as ${role.toUpperCase()}`);
-
-        if (role === "organization") navigate("/organization/dashboard");
-        if (role === "teacher") navigate("/teacher/dashboard");
-        if (role === "student") navigate("/student/dashboard");
 
         onClose();
     };

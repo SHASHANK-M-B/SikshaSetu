@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import InputField from "./InputField";
+import { API_ENDPOINTS } from "../../config/api";
 
 const OrganizationForm = ({ onRegisterSuccess, showToast }) => {
   const [formData, setFormData] = useState({
@@ -33,21 +34,25 @@ const OrganizationForm = ({ onRegisterSuccess, showToast }) => {
     Object.entries(formData).forEach(([k, v]) => fd.append(k, v));
 
     try {
-      const res = await fetch("http://localhost:5000/api/org/register", {
+      const res = await fetch(API_ENDPOINTS.ORGANIZATION_REGISTER, {
         method: "POST",
         body: fd,
       });
-      const data = await res.json();
+      const responseData = await res.json();
 
-      if (!data.success) {
-        showToast?.("error", data.message || "Registration failed");
+      // Store response in variable
+      const apiResponse = responseData;
+
+      if (!res.ok || !responseData.success) {
+        showToast?.("error", responseData.message || "Registration failed");
         return;
       }
 
       showToast?.("success", "Organization submitted for approval!");
       onRegisterSuccess?.("login");
-    } catch {
-      showToast?.("error", "Server error.");
+    } catch (error) {
+      console.error("Registration error:", error);
+      showToast?.("error", "Server error. Please try again.");
     }
   };
 

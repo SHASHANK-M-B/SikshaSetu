@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { FiArrowRight } from "react-icons/fi";
 import InputField from "./InputField";
+import { API_ENDPOINTS } from "../../config/api";
 
 const StudentForm = ({ onRegisterSuccess, showToast }) => {
   const [formData, setFormData] = useState({
@@ -86,16 +87,34 @@ const StudentForm = ({ onRegisterSuccess, showToast }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
-    showToast(
-      "success",
-      `Student "${formData.studentName}" registered in ${formData.org} for ${formData.subject}.`
-    );
+    try {
+      const fd = new FormData();
+      Object.entries(formData).forEach(([k, v]) => fd.append(k, v));
 
-    onRegisterSuccess && onRegisterSuccess("login");
+      const res = await fetch(API_ENDPOINTS.STUDENT_REGISTER, {
+        method: "POST",
+        body: fd,
+      });
+      const responseData = await res.json();
+
+      // Store response in variable
+      const apiResponse = responseData;
+
+      if (!res.ok || !responseData.success) {
+        showToast("error", responseData.message || "Registration failed");
+        return;
+      }
+
+      showToast("success", responseData.message || `Student "${formData.studentName}" registered successfully!`);
+      onRegisterSuccess && onRegisterSuccess("login");
+    } catch (error) {
+      console.error("Registration error:", error);
+      showToast("error", "Server error. Please try again.");
+    }
   };
 
   return (
