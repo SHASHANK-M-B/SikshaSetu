@@ -1,22 +1,10 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { FiUsers, FiPlusCircle, FiTrash2 } from "react-icons/fi";
 
-/**
- * TeacherManagement
- *
- * Props:
- *  - teachers (array)
- *  - setTeachers (fn)
- *  - removeTeacher (fn)
- *  - viewTeacherDetails (fn) // optional, will be called when viewing details
- *  - pendingRequests (array) // optional external requests
- *  - onAcceptRequest (fn) // optional callback when accept pressed
- *  - onDeclineRequest (fn) // optional callback when decline pressed
- */
 export default function TeacherManagement({
   teachers = [],
-  setTeachers = () => {},
-  removeTeacher = () => {},
+  setTeachers = () => { },
+  removeTeacher = () => { },
   viewTeacherDetails = null, // <-- parent may pass this
   pendingRequests: externalPendingRequests = [],
   onAcceptRequest = null,
@@ -210,11 +198,10 @@ export default function TeacherManagement({
             key={cat}
             onClick={() => setSelectedCategory(cat)}
             type="button"
-            className={`px-3 py-1 rounded-full border text-sm ${
-              selectedCategory === cat
+            className={`px-3 py-1 rounded-full border text-sm ${selectedCategory === cat
                 ? "bg-purple-600 text-white"
                 : "bg-white text-gray-700"
-            }`}
+              }`}
           >
             {cat}
           </button>

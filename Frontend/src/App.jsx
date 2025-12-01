@@ -3,10 +3,7 @@ import { Routes, Route } from "react-router-dom";
 // Landing
 import LandingPage from "./pages/landing/LandingPage";
 
-// Auth Pages
-import LoginPage from "./pages/auth/LoginPage";
-import RegisterPage from "./pages/auth/RegisterPage";
-import RoleSelectPage from "./pages/auth/RoleSelectPage";
+
 
 // Dashboards
 import OrganizationDashboard from "./pages/organization/OrganizationDashboard";
@@ -25,10 +22,7 @@ function App() {
         {/* Public Landing Page */}
         <Route path="/" element={<LandingPage />} />
 
-        {/* Authentication */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/register/select" element={<RoleSelectPage />} />
+
 
         {/* Dashboards */}
         <Route

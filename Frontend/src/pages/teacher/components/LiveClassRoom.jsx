@@ -18,25 +18,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?worker&url";
 // Set PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-/*
-  LiveClassRoom_Premium.jsx
-  - PREP -> (Next shows Upload Tip + Summary) -> PRESENT
-  - Upload:
-      - .txt => split into text slides
-      - .pdf => converted into image slides (Slide 1, 2, ...)
-      - .ppt/.pptx => simulated slide list (Slide 1–3, text only)
-  - Live Document View shows either:
-      - slide image (for PDF)
-      - or title/text (for txt / simulated PPT)
-  - Includes:
-      - Schedule (course, date, time)
-      - Upload Tip
-      - Start Live -> Present screen
-      - Back button
-      - Mute/Unmute audio
-      - Bottom reactions (teacher sees 👍 count + student doubts list + reply box)
-      - Session Start / End buttons
-*/
+
 
 // --- Helper Functions ---
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -401,9 +383,9 @@ export default function LiveClassRoom() {
       prev.map((d) =>
         d.id === id
           ? {
-              ...d,
-              reply: replyText,
-            }
+            ...d,
+            reply: replyText,
+          }
           : d
       )
     );

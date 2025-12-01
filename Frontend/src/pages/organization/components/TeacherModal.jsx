@@ -30,8 +30,8 @@ export default function TeacherModal({ teacher, onClose }) {
                                 Status:{" "}
                                 <span
                                     className={`font-semibold ${teacher.status === "Active"
-                                            ? "text-green-600"
-                                            : "text-red-600"
+                                        ? "text-green-600"
+                                        : "text-red-600"
                                         }`}
                                 >
                                     {teacher.status}
