@@ -1,12 +1,9 @@
-import React, { useState } from "react";
-import {
-  FiUsers,
-  FiChevronDown,
-  FiChevronUp,
-  FiX
-} from "react-icons/fi";
+import { approveStudent, getPendingStudents, rejectStudent } from "@/api/admin";
+import { Trophy } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { FiUsers, FiChevronDown, FiChevronUp, FiX } from "react-icons/fi";
 
-export default function StudentManagement() {
+export default function StudentManagement({ organisationData }) {
   const [openCategory, setOpenCategory] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
 
@@ -47,7 +44,7 @@ export default function StudentManagement() {
       quizScores: { Physics: "91%", Math: "88%" },
       streak: "22 days",
       badges: ["Top Learner", "Tech Explorer"],
-    }
+    },
   ]);
 
   const validCourses = ["AI/ML", "VLSI", "Renewable Energy"];
@@ -55,13 +52,14 @@ export default function StudentManagement() {
   // group students by course (recomputed each render)
   const grouped = {
     "AI/ML": [],
-    "VLSI": [],
+    VLSI: [],
     "Renewable Energy": [],
-    "Others": [],
+    Others: [],
   };
 
   students.forEach((student) => {
-    if (validCourses.includes(student.enrolled)) grouped[student.enrolled].push(student);
+    if (validCourses.includes(student.enrolled))
+      grouped[student.enrolled].push(student);
     else grouped["Others"].push(student);
   });
 
@@ -73,49 +71,55 @@ export default function StudentManagement() {
   // Pending join requests
   // -----------------------
   // Dummy pending requests so the menu is visible immediately
-  const [pendingRequests, setPendingRequests] = useState([
-    { id: "req-1", name: "Aman Verma", email: "aman@mail.com", course: "AI/ML", note: "Wants to join AI batch" },
-    { id: "req-2", name: "Sana Kapoor", email: "sana@mail.com", course: "VLSI", note: "Has prior coursework" },
-    { id: "req-3", name: "Rohit Patel", email: "rohit@mail.com", course: "Renewable Energy", note: "Looking for internship-linked course" },
-  ]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const fetchPendingRequests = async () => {
+    try {
+      const response = await getPendingStudents(organisationData.orgId);
+      console.log(response, "student requests");
+      setPendingRequests(response.data.students || []);
+    } catch (error) {
+      console.error("Error fetching pending student requests:", error);
+    }
+  };
 
+  useEffect(() => {
+    fetchPendingRequests();
+  }, []);
   // Accept request: add student to students list and remove from pending
-  const acceptRequest = (req) => {
-    // create a new student entry (id generated)
-    const newId = Math.max(0, ...students.map(s => s.id)) + 1;
-    const newStudent = {
-      id: newId,
-      name: req.name,
-      email: req.email,
-      enrolled: req.course,
-      courses: [req.course],
-      attendance: "0%",
-      quizScores: {},
-      streak: "0 days",
-      badges: [],
-    };
-
-    setStudents(prev => [newStudent, ...prev]);
-    setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+  const acceptRequest = async (req) => {
+    try {
+      const response = await approveStudent(req.studentId);
+      await fetchPendingRequests();
+      console.log(response, "approve student response");
+    } catch (error) {
+      console.log(error, "error approving student");
+    }
   };
 
   // Decline request: remove from pending only
-  const declineRequest = (req) => {
-    setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+  const declineRequest = async (req) => {
+    try {
+      const response = await rejectStudent(
+        req.studentId,
+        "Not eligible at this time"
+      );
+      await fetchPendingRequests();
+    } catch (error) {
+      console.log(error, "error rejecting student");
+    }
   };
+
+  console.log(organisationData, "org data in student mgmt");
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-
       {/* ORG HEADER CLEAN (NO DP) */}
       <div className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 rounded-xl shadow flex items-center justify-between">
         <div>
           <h1 className="text-xl md:text-2xl font-bold">
-            {organizationName}
+            {organisationData?.orgName}
           </h1>
-          <p className="text-sm text-white/80">
-            Student Management System
-          </p>
+          <p className="text-sm text-white/80">Student Management System</p>
         </div>
       </div>
 
@@ -152,7 +156,10 @@ export default function StudentManagement() {
 
                   <tbody>
                     {grouped[course].map((student) => (
-                      <tr key={student.id} className="border-b hover:bg-gray-50">
+                      <tr
+                        key={student.id}
+                        className="border-b hover:bg-gray-50"
+                      >
                         <td className="p-3">{student.id}</td>
                         <td className="p-3">{student.name}</td>
                         <td className="p-3">{student.email}</td>
@@ -249,7 +256,9 @@ export default function StudentManagement() {
         <h3 className="text-lg font-semibold mb-3">New Join Requests</h3>
 
         {pendingRequests.length === 0 ? (
-          <div className="p-4 bg-gray-50 border rounded text-gray-600">No new join requests.</div>
+          <div className="p-4 bg-gray-50 border rounded text-gray-600">
+            No new join requests.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <div className="flex gap-4 pb-2">
@@ -259,17 +268,23 @@ export default function StudentManagement() {
                   className="min-w-[300px] p-4 bg-white border rounded-lg flex-shrink-0 flex flex-col justify-between"
                 >
                   <div>
-                    <div className="font-semibold text-base">{req.name}</div>
-                    <div className="text-sm text-gray-500 truncate">{req.email}</div>
+                    <div className="font-semibold text-base">
+                      {req.studentName}
+                    </div>
+                    <div className="text-sm text-gray-500 truncate">
+                      {req.email}
+                    </div>
 
                     <div className="mt-3 text-sm">
                       <div className="text-xs text-gray-400">Course</div>
                       <div className="px-2 py-1 mt-1 inline-block border rounded text-sm bg-white">
-                        {req.course ?? "—"}
+                        {req.subject}
                       </div>
 
                       {req.note && (
-                        <div className="mt-2 text-xs text-gray-600">{req.note}</div>
+                        <div className="mt-2 text-xs text-gray-600">
+                          {req.note}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -277,13 +292,13 @@ export default function StudentManagement() {
                   <div className="mt-4 flex gap-2">
                     <button
                       onClick={() => acceptRequest(req)}
-                      className="flex-1 px-3 py-2 bg-green-600 text-white rounded"
+                      className="flex-1 px-3 py-2 bg-green-600 text-white rounded cursor-pointer "
                     >
                       Accept
                     </button>
                     <button
                       onClick={() => declineRequest(req)}
-                      className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded border"
+                      className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded border cursor-pointer"
                     >
                       Decline
                     </button>
@@ -294,8 +309,6 @@ export default function StudentManagement() {
           </div>
         )}
       </div>
-
     </div>
   );
 }
-
