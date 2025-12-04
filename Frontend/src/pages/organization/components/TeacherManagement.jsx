@@ -1,12 +1,13 @@
+import { approveTeacher, getTeacherRequest, rejectTeacher } from "@/api/admin";
 import React, { useState, useMemo, useEffect } from "react";
 import { FiUsers, FiPlusCircle, FiTrash2 } from "react-icons/fi";
 
 export default function TeacherManagement({
   teachers = [],
-  setTeachers = () => { },
-  removeTeacher = () => { },
+  setTeachers = () => {},
+  removeTeacher = () => {},
   viewTeacherDetails = null, // <-- parent may pass this
-  pendingRequests: externalPendingRequests = [],
+
   onAcceptRequest = null,
   onDeclineRequest = null,
 }) {
@@ -18,48 +19,6 @@ export default function TeacherManagement({
   const SUBJECTS = ["AI", "VLSI", "Renewable Energy", "Others"];
   const CATEGORIES = ["All", ...SUBJECTS];
   const [selectedCategory, setSelectedCategory] = useState("All");
-
-  // Dummy initial pending requests (will be used if parent didn't pass any)
-  const DUMMY_REQUESTS = [
-    {
-      id: "r-101",
-      name: "Dr. Asha Rao",
-      email: "asha.rao@example.com",
-      course: "AI",
-      message: "Experienced ML trainer, 5 years teaching experience.",
-      courses: ["Intro to AI", "ML Basics"],
-    },
-    {
-      id: "r-102",
-      name: "Mr. Vikram Singh",
-      email: "vikram.singh@example.com",
-      course: "VLSI",
-      message: "Industry expert in chip design.",
-      courses: ["VLSI Design I", "Digital Circuits"],
-    },
-    {
-      id: "r-103",
-      name: "Ms. Priya Menon",
-      email: "priya.menon@example.com",
-      course: "Renewable Energy",
-      message: "Academic background in solar systems.",
-      courses: ["Renewables 101"],
-    },
-  ];
-
-  // Local pending requests state (prefilled with external or dummy)
-  const [localPending, setLocalPending] = useState(
-    Array.isArray(externalPendingRequests) && externalPendingRequests.length > 0
-      ? externalPendingRequests
-      : DUMMY_REQUESTS
-  );
-
-  // Keep local pending in sync if parent passes updated list later
-  useEffect(() => {
-    if (Array.isArray(externalPendingRequests) && externalPendingRequests.length > 0) {
-      setLocalPending(externalPendingRequests);
-    }
-  }, [externalPendingRequests]);
 
   // Modal / details state (for local View modal)
   const [detailExpert, setDetailExpert] = useState(null);
@@ -80,7 +39,10 @@ export default function TeacherManagement({
       courses: ["Course 1", "Course 2"],
     };
 
-    setTeachers((prev) => [newExpert, ...(Array.isArray(prev) ? prev : teachers)]);
+    setTeachers((prev) => [
+      newExpert,
+      ...(Array.isArray(prev) ? prev : teachers),
+    ]);
 
     setName("");
     setEmail("");
@@ -106,9 +68,11 @@ export default function TeacherManagement({
   );
 
   // Accept a pending request
-  const acceptRequest = (request) => {
+  const acceptRequest = async (request) => {
     try {
-      if (typeof onAcceptRequest === "function") onAcceptRequest(request);
+      const response = await approveTeacher(request.teacherId);
+
+      await fetchRequests();
     } catch (e) {
       console.error("onAcceptRequest error:", e);
     }
@@ -123,15 +87,23 @@ export default function TeacherManagement({
       sessions: 0,
       courses: request.courses ?? [],
     };
-    setTeachers((prev) => [newExpert, ...(Array.isArray(prev) ? prev : teachers)]);
+    setTeachers((prev) => [
+      newExpert,
+      ...(Array.isArray(prev) ? prev : teachers),
+    ]);
 
     setLocalPending((prev) => prev.filter((r) => r.id !== request.id));
   };
 
   // Decline a pending request
-  const declineRequest = (request) => {
+  const declineRequest = async (request) => {
     try {
-      if (typeof onDeclineRequest === "function") onDeclineRequest(request);
+      const response = await rejectTeacher(
+        request.teacherId,
+        "Not a good fit at this time"
+      );
+
+      await fetchRequests();
     } catch (e) {
       console.error("onDeclineRequest error:", e);
     }
@@ -157,6 +129,25 @@ export default function TeacherManagement({
 
   // Close detail modal
   const closeDetail = () => setDetailExpert(null);
+
+  const [requests, setRequests] = useState([]);
+
+  const fetchRequests = async () => {
+    // setLoading(true);
+    try {
+      const response = await getTeacherRequest();
+
+      setRequests(response.data.teachers || []);
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to fetch organizations");
+    } finally {
+      // setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
 
   return (
     <div className="space-y-6 px-4 py-6">
@@ -198,16 +189,19 @@ export default function TeacherManagement({
             key={cat}
             onClick={() => setSelectedCategory(cat)}
             type="button"
-            className={`px-3 py-1 rounded-full border text-sm ${selectedCategory === cat
+            className={`px-3 py-1 rounded-full border text-sm ${
+              selectedCategory === cat
                 ? "bg-purple-600 text-white"
                 : "bg-white text-gray-700"
-              }`}
+            }`}
           >
             {cat}
           </button>
         ))}
 
-        <div className="ml-auto text-sm text-gray-500">{filtered.length} shown</div>
+        <div className="ml-auto text-sm text-gray-500">
+          {filtered.length} shown
+        </div>
       </div>
 
       {/* ===== Add New Expert ===== */}
@@ -256,7 +250,9 @@ export default function TeacherManagement({
       {/* ===== Experts Grid ===== */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.length === 0 ? (
-          <div className="p-4 bg-yellow-50 border rounded text-gray-700">No experts found.</div>
+          <div className="p-4 bg-yellow-50 border rounded text-gray-700">
+            No experts found.
+          </div>
         ) : (
           filtered.map((expert) => (
             <div
@@ -264,15 +260,22 @@ export default function TeacherManagement({
               className="p-4 bg-gray-50 border rounded-lg flex flex-col sm:flex-row justify-between gap-3"
             >
               <div className="flex-1">
-                <div className="font-semibold text-base">Expert Name: {expert.name}</div>
-                <div className="text-sm text-gray-500 truncate">{expert.email}</div>
+                <div className="font-semibold text-base">
+                  Expert Name: {expert.name}
+                </div>
+                <div className="text-sm text-gray-500 truncate">
+                  {expert.email}
+                </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                   <div>
-                    Sessions: <span className="font-medium">{expert.sessions ?? 0}</span>
+                    Sessions:{" "}
+                    <span className="font-medium">{expert.sessions ?? 0}</span>
                   </div>
 
-                  <div className="px-2 py-0.5 border rounded text-xs">{expert.subject}</div>
+                  <div className="px-2 py-0.5 border rounded text-xs">
+                    {expert.subject}
+                  </div>
                 </div>
               </div>
 
@@ -300,19 +303,23 @@ export default function TeacherManagement({
       <div className="mt-6">
         <h3 className="text-lg font-semibold mb-3">New Teacher Requests</h3>
 
-        {localPending.length === 0 ? (
-          <div className="p-4 bg-gray-50 border rounded text-gray-600">No new requests.</div>
+        {requests.length === 0 ? (
+          <div className="p-4 bg-gray-50 border rounded text-gray-600">
+            No new requests.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <div className="flex gap-4 pb-2">
-              {localPending.map((req) => (
+              {requests.map((req) => (
                 <div
                   key={req.id}
                   className="min-w-[300px] p-4 bg-white border rounded-lg flex-shrink-0 flex flex-col justify-between"
                 >
                   <div>
                     <div className="font-semibold text-base">{req.name}</div>
-                    <div className="text-sm text-gray-500 truncate">{req.email}</div>
+                    <div className="text-sm text-gray-500 truncate">
+                      {req.email}
+                    </div>
 
                     <div className="mt-3 text-sm">
                       <div className="text-xs text-gray-400">Course</div>
@@ -321,7 +328,9 @@ export default function TeacherManagement({
                       </div>
 
                       {req.message && (
-                        <div className="mt-2 text-xs text-gray-600">{req.message}</div>
+                        <div className="mt-2 text-xs text-gray-600">
+                          {req.message}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -354,7 +363,9 @@ export default function TeacherManagement({
             <div className="flex justify-between items-start">
               <div>
                 <h4 className="text-xl font-semibold">{detailExpert.name}</h4>
-                <div className="text-sm text-gray-500">{detailExpert.email}</div>
+                <div className="text-sm text-gray-500">
+                  {detailExpert.email}
+                </div>
               </div>
               <button
                 onClick={closeDetail}
@@ -366,10 +377,13 @@ export default function TeacherManagement({
 
             <div className="mt-4">
               <div className="text-sm text-gray-600 mb-2">Courses handled:</div>
-              {Array.isArray(detailExpert.courses) && detailExpert.courses.length > 0 ? (
+              {Array.isArray(detailExpert.courses) &&
+              detailExpert.courses.length > 0 ? (
                 <ul className="list-disc list-inside space-y-1 text-sm">
                   {detailExpert.courses.map((c, i) => (
-                    <li key={i} className="text-gray-700">{c}</li>
+                    <li key={i} className="text-gray-700">
+                      {c}
+                    </li>
                   ))}
                 </ul>
               ) : (
