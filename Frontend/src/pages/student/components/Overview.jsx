@@ -40,19 +40,19 @@ export default function Overview({ studentDetails, quizItems }) {
         <OverviewCard
           icon={FiBookOpen}
           title="Enrolled Courses"
-          value="4"
+          value={studentDetailss?.quickStats?.enrolledCourses}
           color="from-indigo-500 to-purple-500"
         />
         <OverviewCard
           icon={FiFileText}
-          title="Pending Quizzes"
-          value={pendingQuizzes}
+          title="Compelted Quizes"
+          value={studentDetailss?.quickStats?.completedQuizzes}
           color="from-red-500 to-orange-500"
         />
         <OverviewCard
           icon={FiClock}
-          title="Study Hours (Week)"
-          value="15.5"
+          title="Active Session"
+          value={studentDetailss?.quickStats?.activeSessions}
           color="from-blue-500 to-cyan-500"
         />
       </div>

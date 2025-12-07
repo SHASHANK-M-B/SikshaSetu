@@ -14,11 +14,11 @@ import {
 
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?worker&url";
+import { time } from "framer-motion";
+import { scheduleLiveClass } from "@/api/teacher";
 
 // Set PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
-
-
 
 // --- Helper Functions ---
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -88,9 +88,56 @@ const availableCourses = [
 // ---------------------------------
 
 export default function LiveClassRoom() {
+  // --- SCHEDULE CLASS ---
   const [phase, setPhase] = useState("prep"); // prep, present
+  const [scheduleclassLoading, setScheduleClassLoading] = useState(false);
+  const initialFormData = {
+    sessionTitle: "",
+    shortDescription: "",
+    courseId: "",
+    sessionHeading: "",
+    date: "",
+    time: "",
+  };
+
+  const [scheduleClass, setScheduleClass] = useState(initialFormData);
+
+  const handleScheduleClass = (e) => {
+    const { name, value } = e.target;
+    setScheduleClass((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // const handlescheduleLiveClass = async () => {
+  //   e.preventDefault()
+  //   setScheduleClassLoading(true);
+  //   try {
+  //     const response = await scheduleLiveClass(scheduleClass);
+  //     console.log(response, "class scheduled");
+  //     if (response.status === 200) {
+  //       setScheduleClassLoading(false);
+  //     }
+  //   } catch (error) {}
+  // };
 
   // slides: can be text-based or image-based
+  const handlescheduleLiveClass = async (e) => {
+  e.preventDefault();
+  setScheduleClassLoading(true);
+
+  try {
+    const response = await scheduleLiveClass(scheduleClass);
+    console.log(response, "class scheduled");
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setScheduleClassLoading(false);
+  }
+};
+
+  
   const defaultSlides = [
     {
       id: uid("s1"),
@@ -141,8 +188,7 @@ export default function LiveClassRoom() {
       new CustomEvent("edu_slide_index", { detail: { index } })
     );
   };
-  const next = () =>
-    pushSlide(Math.min(slidesDeck.length - 1, slideIndex + 1));
+  const next = () => pushSlide(Math.min(slidesDeck.length - 1, slideIndex + 1));
   const prev = () => pushSlide(Math.max(0, slideIndex - 1));
 
   /* -----------------
@@ -363,12 +409,11 @@ export default function LiveClassRoom() {
     setMessage("Pushed current slide to students.");
   };
 
-  const currentSlide =
-    slidesDeck[slideIndex] || {
-      title: "—",
-      text: "No slide available.",
-      imageUrl: null,
-    };
+  const currentSlide = slidesDeck[slideIndex] || {
+    title: "—",
+    text: "No slide available.",
+    imageUrl: null,
+  };
 
   // handle teacher reply change
   const handleReplyChange = (id, value) => {
@@ -383,9 +428,9 @@ export default function LiveClassRoom() {
       prev.map((d) =>
         d.id === id
           ? {
-            ...d,
-            reply: replyText,
-          }
+              ...d,
+              reply: replyText,
+            }
           : d
       )
     );
@@ -410,14 +455,16 @@ export default function LiveClassRoom() {
                 LiveClass — Premium Presenter
               </h1>
               <div className="text-sm opacity-90 truncate">
-                Start, upload slides, and go live with audio + student reactions.
+                Start, upload slides, and go live with audio + student
+                reactions.
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between">
             <div className="hidden sm:block text-sm font-medium bg-white bg-opacity-10 px-3 py-2 rounded-lg">
-              Status: <span className="ml-2 font-semibold">{phase.toUpperCase()}</span>
+              Status:{" "}
+              <span className="ml-2 font-semibold">{phase.toUpperCase()}</span>
             </div>
 
             <div className="flex gap-3">
@@ -442,92 +489,133 @@ export default function LiveClassRoom() {
                 Prepare your session
               </h2>
               <p className="text-sm text-slate-600 mb-4">
-                Add a short description and set up the session time. Click Next to configure uploads and go live.
+                Add a short description and set up the session time. Click Next
+                to configure uploads and go live.
               </p>
-
-              {/* Session Details */}
-              <div className="space-y-3">
-                <label className="block">
-                  <div className="text-xs text-slate-500 mb-1">Session Title</div>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    defaultValue="My Live Class"
-                  />
-                </label>
-
-                <label className="block">
-                  <div className="text-xs text-slate-500 mb-1">Short Description</div>
-                  <textarea className="w-full border rounded-lg px-3 py-2 min-h-[72px] focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                    A quick session on ML basics
-                  </textarea>
-                </label>
-              </div>
-
-              {/* Session Scheduling */}
-              <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-3">
-                <h3 className="text-base font-semibold text-yellow-800">Session Scheduling</h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Course Title (Select) */}
+              <form
+                onSubmit={handlescheduleLiveClass}
+                title="live_class_schedule"
+              >
+                {/* Session Details */}
+                <div className="space-y-3">
                   <label className="block">
-                    <div className="text-xs text-yellow-700/80 mb-1">Course Title</div>
-                    <select
-                      value={courseTitle}
-                      onChange={(e) => setCourseTitle(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
-                    >
-                      {availableCourses.map((course, index) => (
-                        <option key={index} value={course}>
-                          {course}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {/* Section Title */}
-                  <label className="block">
-                    <div className="text-xs text-yellow-700/80 mb-1">Section Title</div>
+                    <div className="text-xs text-slate-500 mb-1">
+                      Session Title
+                    </div>
                     <input
+                      className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      defaultValue="My Live Class"
                       type="text"
-                      value={sectionTitle}
-                      onChange={(e) => setSectionTitle(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
+                      name="sessionTitle"
+                      value={scheduleClass.sessionTitle}
+                      onChange={handleScheduleClass}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <div className="text-xs text-slate-500 mb-1">
+                      Short Description
+                    </div>
+                    <textarea
+                      className="w-full border rounded-lg px-3 py-2 min-h-[72px] focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      name="shortDescription"
+                      value={scheduleClass.shortDescription}
+                      onChange={handleScheduleClass}
+                      type="text"
                     />
                   </label>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Date */}
-                  <label className="block">
-                    <div className="text-xs text-yellow-700/80 mb-1">Date</div>
-                    <input
-                      type="date"
-                      value={sessionDate}
-                      onChange={(e) => setSessionDate(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
-                    />
-                  </label>
-                  {/* Time */}
-                  <label className="block">
-                    <div className="text-xs text-yellow-700/80 mb-1">Time</div>
-                    <input
-                      type="time"
-                      value={sessionTime}
-                      onChange={(e) => setSessionTime(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
-                    />
-                  </label>
+                {/* Session Scheduling */}
+                <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-3">
+                  <h3 className="text-base font-semibold text-yellow-800">
+                    Session Scheduling
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Course Title (Select) */}
+                    <label className="block">
+                      <div className="text-xs text-yellow-700/80 mb-1">
+                        Course Title
+                      </div>
+                      <select
+                        name="sessionHeading"
+                        value={scheduleClass.sessionHeading}
+                        onChange={handleScheduleClass}
+                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
+                      >
+                        {availableCourses.map((course, index) => (
+                          <option key={index} value={course}>
+                            {course}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {/* Section Title */}
+                    <label className="block">
+                      <div className="text-xs text-yellow-700/80 mb-1">
+                        Section Title
+                      </div>
+                      <input
+                        type="text"
+                        name="courseId"
+                        value={scheduleClass.courseId}
+                        onChange={handleScheduleClass}
+                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Date */}
+                    <label className="block">
+                      <div className="text-xs text-yellow-700/80 mb-1">
+                        Date
+                      </div>
+                      <input
+                        type="date"
+                        name="date"
+                        value={scheduleClass.date}
+                        onChange={handleScheduleClass}
+                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
+                      />
+                    </label>
+                    {/* Time */}
+                    <label className="block">
+                      <div className="text-xs text-yellow-700/80 mb-1">
+                        Time
+                      </div>
+                      <input
+                        type="time"
+                        name="time"
+                        value={scheduleClass.time}
+                        onChange={handleScheduleClass}
+                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-300"
+                      />
+                    </label>
+                  </div>
+
+                  <p className="text-xs text-yellow-700/80">
+                    *Note: Full scheduling and calendar integration logic goes
+                    here, including options to repeat or invite specific groups.
+                  </p>
                 </div>
-
-                <p className="text-xs text-yellow-700/80">
-                  *Note: Full scheduling and calendar integration logic goes here, including options to repeat or invite specific groups.
-                </p>
-              </div>
-
+                <div className="flex justify-end mt-6">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-lg shadow font-semibold hover:scale-[1.01] transition-transform w-full sm:w-auto cursor-pointer"
+                  >
+                    {scheduleclassLoading
+                      ? "Scheduling Live Class"
+                      : "Schedule Live Class"}
+                  </button>
+                </div>
+              </form>
               {/* Action buttons */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-6 pt-4 border-t border-slate-200">
                 <button
                   onClick={startLiveFlowNext}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-lg shadow font-semibold hover:scale-[1.01] transition-transform w-full sm:w-auto"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-lg shadow font-semibold hover:scale-[1.01] transition-transform w-full sm:w-auto cursor-pointer"
                 >
                   Next
                 </button>
@@ -543,7 +631,9 @@ export default function LiveClassRoom() {
                     <div>
                       <div className="text-sm font-semibold">Upload Tip</div>
                       <div className="text-xs text-indigo-700/80">
-                        Upload a plain text (.txt) split by blank lines for instant slide import, or upload a PDF for real slide images. PPT/PPTX creates simulated slides here.
+                        Upload a plain text (.txt) split by blank lines for
+                        instant slide import, or upload a PDF for real slide
+                        images. PPT/PPTX creates simulated slides here.
                       </div>
                     </div>
                   </div>
@@ -571,9 +661,7 @@ export default function LiveClassRoom() {
                     </div>
                   )}
                   {message && (
-                    <div className="mt-2 text-xs text-slate-700">
-                      {message}
-                    </div>
+                    <div className="mt-2 text-xs text-slate-700">{message}</div>
                   )}
                 </div>
               )}
@@ -582,7 +670,11 @@ export default function LiveClassRoom() {
               {sessionScheduled && (
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
                   <div className="text-sm text-indigo-900 font-medium truncate">
-                    {courseTitle !== availableCourses[0] ? courseTitle : "Course not set"} • {sessionDate || "Date not set"} at {sessionTime || "Time not set"}
+                    {courseTitle !== availableCourses[0]
+                      ? courseTitle
+                      : "Course not set"}{" "}
+                    • {sessionDate || "Date not set"} at{" "}
+                    {sessionTime || "Time not set"}
                   </div>
                   <button
                     onClick={() => setPhase("present")}
@@ -606,8 +698,12 @@ export default function LiveClassRoom() {
             <div className="flex-1 bg-slate-50 border border-slate-100 rounded-xl p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="text-sm font-semibold text-slate-700">Live Document View</div>
-                  <div className="text-xs text-slate-500">Slide {slideIndex + 1} / {slidesDeck.length}</div>
+                  <div className="text-sm font-semibold text-slate-700">
+                    Live Document View
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Slide {slideIndex + 1} / {slidesDeck.length}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -639,8 +735,12 @@ export default function LiveClassRoom() {
                     />
                   ) : (
                     <div className="px-4 text-center">
-                      <h3 className="text-lg sm:text-2xl font-bold text-indigo-700 mb-2">{currentSlide.title}</h3>
-                      <p className="text-sm sm:text-base text-slate-600 max-w-2xl">{currentSlide.text}</p>
+                      <h3 className="text-lg sm:text-2xl font-bold text-indigo-700 mb-2">
+                        {currentSlide.title}
+                      </h3>
+                      <p className="text-sm sm:text-base text-slate-600 max-w-2xl">
+                        {currentSlide.text}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -673,15 +773,23 @@ export default function LiveClassRoom() {
               <div className="p-3 bg-white border rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-sm font-semibold">Audio</div>
-                  <div className="text-xs text-slate-500">Live speaker status</div>
+                  <div className="text-xs text-slate-500">
+                    Live speaker status
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={toggleAudio}
-                    className={`px-3 py-2 rounded-lg flex items-center gap-2 font-semibold text-sm ${isLive ? "bg-red-600 text-white" : "bg-green-600 text-white"}`}
+                    className={`px-3 py-2 rounded-lg flex items-center gap-2 font-semibold text-sm ${
+                      isLive
+                        ? "bg-red-600 text-white"
+                        : "bg-green-600 text-white"
+                    }`}
                   >
                     {isLive ? <FiStopCircle /> : <FiMic />}
-                    <span className="hidden sm:inline">{isLive ? "Mute" : "Unmute"}</span>
+                    <span className="hidden sm:inline">
+                      {isLive ? "Mute" : "Unmute"}
+                    </span>
                   </button>
                   {isLive && (
                     <div className="text-sm text-red-500 font-medium">
@@ -699,7 +807,11 @@ export default function LiveClassRoom() {
                     <button
                       key={s.id}
                       onClick={() => pushSlide(i)}
-                      className={`text-xs p-2 rounded ${i === slideIndex ? "bg-indigo-600 text-white" : "bg-slate-50"}`}
+                      className={`text-xs p-2 rounded ${
+                        i === slideIndex
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-50"
+                      }`}
                       title={s.title}
                     >
                       {i + 1}
@@ -711,10 +823,26 @@ export default function LiveClassRoom() {
               {/* Session Info + Start / End Session */}
               <div className="p-3 bg-white border rounded-lg text-sm">
                 <div className="font-semibold mb-2">Session Info</div>
-                <div className="text-xs text-slate-600">Course: <strong>{courseTitle !== availableCourses[0] ? courseTitle : "Not set"}</strong></div>
-                <div className="text-xs text-slate-600 mt-1">Section: <strong>{sectionTitle || "Not set"}</strong></div>
-                <div className="text-xs text-slate-600 mt-1">Scheduled: <strong>{sessionDate || "—"} at {sessionTime || "—"}</strong></div>
-                <div className="text-xs text-slate-600 mt-1">Deck: <strong>{uploadedName || "unspecified"}</strong></div>
+                <div className="text-xs text-slate-600">
+                  Course:{" "}
+                  <strong>
+                    {courseTitle !== availableCourses[0]
+                      ? courseTitle
+                      : "Not set"}
+                  </strong>
+                </div>
+                <div className="text-xs text-slate-600 mt-1">
+                  Section: <strong>{sectionTitle || "Not set"}</strong>
+                </div>
+                <div className="text-xs text-slate-600 mt-1">
+                  Scheduled:{" "}
+                  <strong>
+                    {sessionDate || "—"} at {sessionTime || "—"}
+                  </strong>
+                </div>
+                <div className="text-xs text-slate-600 mt-1">
+                  Deck: <strong>{uploadedName || "unspecified"}</strong>
+                </div>
 
                 <div className="mt-3 flex flex-col sm:flex-row gap-2">
                   <button
@@ -745,31 +873,47 @@ export default function LiveClassRoom() {
           {/* Message + bottom reactions section (teacher console) */}
           <div className="mt-4 space-y-3">
             {message && (
-              <div className="text-xs text-slate-500 text-center">{message}</div>
+              <div className="text-xs text-slate-500 text-center">
+                {message}
+              </div>
             )}
 
             <div className="w-full max-w-3xl mx-auto bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col gap-4">
               {/* Understood counter */}
               <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
                 <FiThumbsUp className="text-green-600" />
-                <span>Understood reactions: <span className="font-semibold">{reactionCounts.understood || 0}</span></span>
+                <span>
+                  Understood reactions:{" "}
+                  <span className="font-semibold">
+                    {reactionCounts.understood || 0}
+                  </span>
+                </span>
               </div>
 
               {/* Doubts list */}
               <div className="border-t border-slate-200 pt-3">
-                <div className="text-xs font-semibold text-slate-600 mb-2">Student Doubts</div>
+                <div className="text-xs font-semibold text-slate-600 mb-2">
+                  Student Doubts
+                </div>
 
                 {doubts.length === 0 ? (
-                  <div className="text-xs text-slate-400">No doubts yet from students.</div>
+                  <div className="text-xs text-slate-400">
+                    No doubts yet from students.
+                  </div>
                 ) : (
                   <div className="space-y-3 max-h-52 overflow-y-auto">
                     {doubts.map((d) => (
-                      <div key={d.id} className="bg-white rounded-md border border-slate-200 p-3 text-xs flex flex-col gap-2">
+                      <div
+                        key={d.id}
+                        className="bg-white rounded-md border border-slate-200 p-3 text-xs flex flex-col gap-2"
+                      >
                         <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                           <div className="text-slate-800 break-words">
                             {d.text}
                             {typeof d.slideIndex === "number" && (
-                              <span className="ml-2 text-[11px] text-slate-500">(Slide {d.slideIndex + 1})</span>
+                              <span className="ml-2 text-[11px] text-slate-500">
+                                (Slide {d.slideIndex + 1})
+                              </span>
                             )}
                           </div>
                         </div>
@@ -786,7 +930,9 @@ export default function LiveClassRoom() {
                             type="text"
                             placeholder="Type reply..."
                             value={replyDrafts[d.id] ?? ""}
-                            onChange={(e) => handleReplyChange(d.id, e.target.value)}
+                            onChange={(e) =>
+                              handleReplyChange(d.id, e.target.value)
+                            }
                             className="flex-1 border rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-300 w-full"
                           />
                           <button

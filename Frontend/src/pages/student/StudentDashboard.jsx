@@ -185,7 +185,9 @@ export default function StudentDashboard() {
                   className="w-12 h-12 rounded-full border-2 border-white shadow"
                 />
 
-                <h2 className="text-2xl font-bold">YourOrg</h2>
+                <h2 className="text-2xl font-bold">
+                  {studentDetails?.orgName}
+                </h2>
               </div>
 
               <div className="flex justify-between items-center mb-6">
@@ -249,7 +251,9 @@ export default function StudentDashboard() {
             className="w-12 h-12 rounded-full border-2 border-white shadow"
           />
 
-          {isSidebarOpen && <h1 className="text-xl font-bold">YourOrg</h1>}
+          {isSidebarOpen && (
+            <h1 className="text-xl font-bold">{studentDetails?.orgName}</h1>
+          )}
 
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}

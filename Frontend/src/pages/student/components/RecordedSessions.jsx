@@ -1,7 +1,5 @@
-
-
-
-import React, { useState, useMemo } from "react";
+import { getRecordedSessionList } from "@/api/student";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FiDownload,
   FiEye,
@@ -68,9 +66,7 @@ export default function RecordedSession() {
 
   const handleDownload = (sessionId) => {
     setSessions((prev) =>
-      prev.map((s) =>
-        s.id === sessionId ? { ...s, downloaded: true } : s
-      )
+      prev.map((s) => (s.id === sessionId ? { ...s, downloaded: true } : s))
     );
   };
 
@@ -89,14 +85,22 @@ export default function RecordedSession() {
   };
 
   const handleStop = () => {};
+  const getRecordedSessionLists = async () => {
+    try {
+      const response = await getRecordedSessionList();
+      setSessions(response.data.recordings);
+    } catch (error) {}
+  };
+
+  useEffect(() => {
+    getRecordedSessionLists();
+  }, []);
 
   if (activeSession) {
-    const currentSlide =
-      activeSession.slides[currentSlideIndex] || null;
+    const currentSlide = activeSession.slides[currentSlideIndex] || null;
 
     return (
       <div className="min-h-screen w-full bg-slate-100 flex flex-col">
-
         {/* DESKTOP HEADER */}
         <header className="hidden md:flex w-full px-6 py-4 bg-white border-b justify-between items-center">
           <button
@@ -122,9 +126,7 @@ export default function RecordedSession() {
 
         {/* DESKTOP PLAYER */}
         <main className="hidden md:flex flex-col items-center py-6 w-full">
-
           <div className="w-full max-w-5xl aspect-video rounded-2xl bg-slate-900 overflow-hidden relative">
-
             {currentSlide ? (
               <img
                 src={currentSlide}
@@ -140,14 +142,11 @@ export default function RecordedSession() {
             <div className="absolute top-3 left-4 bg-emerald-500 text-[11px] px-3 py-1 rounded-full">
               Static PPT Dashboard
             </div>
-
           </div>
 
           {/* Controls */}
           <div className="w-full max-w-5xl mt-4 rounded-2xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col gap-4">
-
             <div className="flex flex-wrap gap-3">
-
               <button
                 onClick={() => setMuted(!muted)}
                 className="flex-1 min-w-[120px] flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-slate-50 py-2.5 text-sm font-medium"
@@ -170,7 +169,6 @@ export default function RecordedSession() {
               >
                 <FiArrowLeft /> Back
               </button>
-
             </div>
 
             <div className="flex items-center gap-3">
@@ -183,20 +181,20 @@ export default function RecordedSession() {
                 onChange={(e) => setProgress(Number(e.target.value))}
                 className="flex-1 accent-indigo-600"
               />
-              <span className="text-[11px]">
-                {Math.round(progress)}%
-              </span>
+              <span className="text-[11px]">{Math.round(progress)}%</span>
             </div>
-
           </div>
         </main>
 
         {/* MOBILE */}
         <div className="md:hidden flex flex-col flex-1">
-
           <div className="px-4 pt-4 pb-2">
-            <div className="text-xs uppercase text-slate-500">Recorded Video</div>
-            <div className="font-semibold text-base text-slate-900">{activeSession.course}</div>
+            <div className="text-xs uppercase text-slate-500">
+              Recorded Video
+            </div>
+            <div className="font-semibold text-base text-slate-900">
+              {activeSession.course}
+            </div>
             <div className="text-sm text-slate-600">{activeSession.title}</div>
             <div className="text-[11px] text-slate-500 mt-1">
               Duration: {activeSession.duration}
@@ -204,7 +202,6 @@ export default function RecordedSession() {
           </div>
 
           <div className="relative w-full h-[50vh] bg-slate-900 overflow-hidden">
-
             {currentSlide ? (
               <img
                 src={currentSlide}
@@ -220,13 +217,10 @@ export default function RecordedSession() {
             <div className="absolute top-2 left-2 bg-emerald-500 text-[10px] px-2 py-1 rounded-full">
               Static PPT Dashboard
             </div>
-
           </div>
 
           <div className="px-4 py-4 flex flex-col gap-4 bg-slate-100">
-
             <div className="flex gap-3">
-
               <button
                 onClick={() => setMuted(!muted)}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white py-3 text-sm font-medium"
@@ -242,11 +236,12 @@ export default function RecordedSession() {
                 {playing ? <FiPause /> : <FiPlay />}
                 {playing ? "Pause" : "Resume"}
               </button>
-
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-700 shrink-0">Scroll</span>
+              <span className="text-xs font-medium text-slate-700 shrink-0">
+                Scroll
+              </span>
               <input
                 type="range"
                 min={0}
@@ -268,7 +263,6 @@ export default function RecordedSession() {
                 <FiArrowLeft /> Back
               </button>
             </div>
-
           </div>
         </div>
       </div>
@@ -278,30 +272,39 @@ export default function RecordedSession() {
   return (
     <div className="min-h-screen w-full bg-slate-100 flex flex-col items-center px-4 py-8">
       <div className="w-full max-w-5xl">
-
         <h1 className="text-3xl font-bold text-slate-900">Recorded Session</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Access your recorded classes, download them, and watch the Static PPT Dashboard with audio controls.
+          Access your recorded classes, download them, and watch the Static PPT
+          Dashboard with audio controls.
         </p>
 
         <div className="hidden md:block mt-6 rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Course</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Title</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Time</th>
-                <th className="text-right px-4 py-3 font-semibold text-slate-600">Action</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600">
+                  Course
+                </th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600">
+                  Title
+                </th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600">
+                  Time
+                </th>
+                <th className="text-right px-4 py-3 font-semibold text-slate-600">
+                  Action
+                </th>
               </tr>
             </thead>
 
             <tbody>
               {sessions.map((session) => (
                 <tr key={session.id} className="border-b last:border-b-0">
-
                   <td className="px-4 py-3 text-slate-800">{session.course}</td>
                   <td className="px-4 py-3 text-slate-700">{session.title}</td>
-                  <td className="px-4 py-3 text-slate-500">{session.duration}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {session.duration}
+                  </td>
 
                   <td className="px-4 py-3 text-right">
                     {!session.downloaded ? (
@@ -322,16 +325,13 @@ export default function RecordedSession() {
                       </button>
                     )}
                   </td>
-
                 </tr>
               ))}
             </tbody>
-
           </table>
         </div>
 
         <div className="md:hidden mt-6 flex flex-col gap-3">
-
           {sessions.map((session) => (
             <div
               key={session.id}
@@ -341,11 +341,15 @@ export default function RecordedSession() {
                 Recorded Session
               </div>
 
-              <div className="font-semibold text-slate-900">{session.course}</div>
+              <div className="font-semibold text-slate-900">
+                {session.course}
+              </div>
 
               <div className="text-sm text-slate-700">{session.title}</div>
 
-              <div className="text-xs text-slate-500 mt-1">Time: {session.duration}</div>
+              <div className="text-xs text-slate-500 mt-1">
+                Time: {session.duration}
+              </div>
 
               <div className="mt-3 flex justify-end">
                 {!session.downloaded ? (
@@ -366,11 +370,9 @@ export default function RecordedSession() {
                   </button>
                 )}
               </div>
-
             </div>
           ))}
         </div>
-
       </div>
     </div>
   );

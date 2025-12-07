@@ -1,245 +1,366 @@
-
 import React, { useEffect, useState } from "react";
 import {
-    FiThumbsUp,
-    FiMessageCircle,
-    FiCheckCircle,
-    FiSend,
-    FiTrash2,
+  getAllDiscussions,
+  getDiscussionThread,
+  replyToDiscussion,
+  // updateDiscussionStatus,
+} from "@/api/teacher";
+import {
+  FiThumbsUp,
+  FiMessageCircle,
+  FiCheckCircle,
+  FiSend,
+  FiTrash2,
+  FiRefreshCw,
 } from "react-icons/fi";
 
-const load = (k, f) => {
-    try {
-        const raw = localStorage.getItem(k);
-        return raw ? JSON.parse(raw) : f;
-    } catch {
-        return f;
-    }
-};
-const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const uid = (p = "") => p + Math.random().toString(36).slice(2, 9);
 
 export default function DiscussionDoubts() {
-    const [doubts, setDoubts] = useState(() => load("edu_doubts", []));
-    const [notifications, setNotifications] = useState(() =>
-        load("edu_notifications", []),
+  const [doubts, setDoubts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState([]); // Local state for now (no backend endpoint)
+
+  const [teacherMsg, setTeacherMsg] = useState("");
+  const [replyOpen, setReplyOpen] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyingId, setReplyingId] = useState(null);
+
+  // --- INITIAL DATA FETCH ---
+  useEffect(() => {
+    fetchDoubts();
+  }, []);
+
+  const fetchDoubts = async () => {
+    try {
+      setLoading(true);
+      // 1. Get List (Returns basic info: title, studentName, etc.)
+      const { data } = await getAllDiscussions();
+      const basicList = data.discussions || [];
+
+      // 2. Hydrate with Details (Description & Replies)
+      // The list API doesn't return the full description or replies array,
+      // so we fetch thread details for each item to populate the UI fully.
+      const detailedDoubts = await Promise.all(
+        basicList.map(async (item) => {
+          try {
+            const threadRes = await getDiscussionThread(item.discussionId);
+            return {
+              ...item,
+              // Backend 'description' maps to UI 'text'
+              text: threadRes.data.discussion.description || item.title,
+              replies: threadRes.data.replies || [],
+              // Normalize ID
+              id: item.discussionId,
+            };
+          } catch (e) {
+            console.warn(`Failed to load thread for ${item.discussionId}`, e);
+            return {
+              ...item,
+              id: item.discussionId,
+              text: item.title,
+              replies: [],
+            };
+          }
+        })
+      );
+
+      setDoubts(detailedDoubts);
+    } catch (error) {
+      console.error("Failed to load discussions", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- BROADCAST (Mock / UI Only) ---
+  const postTeacherMessage = (e) => {
+    e.preventDefault();
+    if (!teacherMsg.trim()) return;
+
+    // NOTE: Backend doesn't have a broadcast endpoint yet.
+    // This just updates local state for visual feedback.
+    setNotifications((n) => [
+      ...n,
+      {
+        id: uid("n_"),
+        for: "student",
+        message: teacherMsg,
+        type: "broadcast",
+        at: new Date().toISOString(),
+      },
+    ]);
+
+    setTeacherMsg("");
+    alert("Message sent to all students (Simulation)");
+  };
+
+  // --- ACTIONS ---
+
+  const like = (id) => {
+    // Backend doesn't support 'likes' yet. Local update only.
+    setDoubts((d) => d.map((x) => (x.id === id ? { ...x, liked: true } : x)));
+  };
+
+  const resolve = async (id) => {
+    try {
+      // Optimistic update
+      setDoubts((d) =>
+        d.map((x) => (x.id === id ? { ...x, status: "resolved" } : x))
+      );
+      await updateDiscussionStatus(id, "resolved");
+    } catch (error) {
+      console.error("Failed to resolve", error);
+      alert("Failed to update status");
+      fetchDoubts(); // Revert on error
+    }
+  };
+
+  const deleteDoubt = (id) => {
+    // Backend teacherRoutes.js does NOT expose a DELETE method for discussions.
+    // We cannot perform this action on the server currently.
+    alert(
+      "Delete functionality is not currently enabled for Teachers in the backend."
     );
+  };
 
-    const [teacherMsg, setTeacherMsg] = useState("");
-    const [replyOpen, setReplyOpen] = useState(null);
-    const [replyText, setReplyText] = useState("");
+  const submitReply = async (id) => {
+    if (!replyText.trim()) return;
 
-    useEffect(() => save("edu_doubts", doubts), [doubts]);
-    useEffect(() => save("edu_notifications", notifications), [notifications]);
+    try {
+      setReplyingId(id);
 
-    const postTeacherMessage = (e) => {
-        e.preventDefault();
-        if (!teacherMsg.trim()) return;
+      const payload = { messageText: replyText };
+      const { data } = await replyToDiscussion(id, payload);
 
-        setNotifications((n) => [
-            ...n,
-            {
-                id: uid("n_"),
-                for: "student",
-                message: teacherMsg,
-                type: "broadcast",
-                at: new Date().toISOString(),
-            },
-        ]);
+      // data.reply contains the new reply object from backend
+      const newReply = {
+        id: data.reply.replyId || uid("rep_"),
+        text: data.reply.messageText,
+        at: data.reply.createdAt || new Date().toISOString(),
+        by: "Teacher", // Or use req.user.name from context
+      };
 
-        setTeacherMsg("");
-        alert("Message sent to all students");
-    };
+      setDoubts((prev) =>
+        prev.map((doubt) =>
+          doubt.id === id
+            ? { ...doubt, replies: [...(doubt.replies || []), newReply] }
+            : doubt
+        )
+      );
 
-    const like = (id) => {
-        setDoubts((d) =>
-            d.map((x) => (x.id === id ? { ...x, liked: true } : x)),
-        );
-    };
+      setReplyText("");
+      setReplyOpen(null);
+    } catch (error) {
+      console.error("Reply failed", error);
+      alert("Failed to send reply");
+    } finally {
+      setReplyingId(null);
+    }
+  };
 
-    const resolve = (id) => {
-        setDoubts((d) =>
-            d.map((x) => (x.id === id ? { ...x, status: "resolved" } : x)),
-        );
-    };
+  return (
+    <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 space-y-6">
+      {/* HEADER & REFRESH */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-800">Student Doubts</h2>
+        <button
+          onClick={fetchDoubts}
+          disabled={loading}
+          className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"
+          title="Refresh List"
+        >
+          <FiRefreshCw className={loading ? "animate-spin" : ""} />
+        </button>
+      </div>
 
-    const deleteDoubt = (id) => {
-        if (!confirm("Delete this doubt?")) return;
-        setDoubts((d) => d.filter((x) => x.id !== id));
-    };
+      {/* TEACHER BROADCAST */}
+      <form
+        onSubmit={postTeacherMessage}
+        className="bg-white border border-blue-100 shadow-sm rounded-xl p-5 bg-gradient-to-r from-blue-50/50 to-transparent"
+      >
+        <h3 className="font-bold text-lg mb-3 text-blue-900">
+          📢 Class Broadcast
+        </h3>
 
-    const submitReply = (id) => {
-        if (!replyText.trim()) return;
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            value={teacherMsg}
+            onChange={(e) => setTeacherMsg(e.target.value)}
+            placeholder="Type an announcement for all students..."
+            className="flex-1 border border-blue-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
+          />
 
-        setDoubts((d) =>
-            d.map((x) =>
-                x.id === id
-                    ? {
-                        ...x,
-                        replies: [
-                            ...x.replies,
-                            {
-                                id: uid("rep_"),
-                                text: replyText,
-                                at: new Date().toISOString(),
-                                by: "Teacher",
-                            },
-                        ],
-                    }
-                    : x,
-            ),
-        );
+          <button
+            type="submit"
+            className="px-6 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-2 font-medium shadow-md"
+          >
+            <FiSend size={16} />
+            Post
+          </button>
+        </div>
+      </form>
 
-        setReplyText("");
-        setReplyOpen(null);
-    };
+      {/* DOUBTS LIST */}
+      {loading && doubts.length === 0 && (
+        <div className="text-center py-10 text-gray-500">
+          Loading discussion threads...
+        </div>
+      )}
 
-    return (
-        <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 space-y-6">
+      {!loading && doubts.length === 0 && (
+        <div className="p-8 text-slate-500 bg-white border border-dashed rounded-xl text-center">
+          No doubts raised yet.
+        </div>
+      )}
 
-            {/* TEACHER BROADCAST */}
-            <form
-                onSubmit={postTeacherMessage}
-                className="bg-white border rounded-xl p-5"
-            >
-                <h3 className="font-bold text-lg mb-3">Message To All Students</h3>
+      <div className="space-y-4">
+        {doubts.map((d) => (
+          <div
+            key={d.id}
+            className="bg-white border border-gray-200 shadow-sm rounded-xl p-5 hover:border-gray-300 transition"
+          >
+            {/* HEADER */}
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-lg text-gray-900">
+                    {d.studentName || d.student || "Unknown Student"}
+                  </span>
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                    {d.course?.courseCode || "General"}
+                  </span>
+                </div>
+                <div className="text-gray-700 mt-2 whitespace-pre-wrap">
+                  {d.text}
+                </div>
+                <div className="text-xs text-gray-400 mt-2">
+                  Posted:{" "}
+                  {d.createdAt
+                    ? new Date(d.createdAt._seconds * 1000).toLocaleString()
+                    : "Just now"}
+                </div>
+              </div>
 
+              <span
+                className={`text-xs px-3 py-1 rounded-full uppercase font-bold tracking-wide ${
+                  d.status === "resolved"
+                    ? "bg-green-100 text-green-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {d.status || "unresolved"}
+              </span>
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100">
+              <button
+                onClick={() => like(d.id)}
+                className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border transition ${
+                  d.liked
+                    ? "bg-pink-50 border-pink-200 text-pink-600"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <FiThumbsUp size={16} />
+                {d.liked ? "Liked" : "Like"}
+              </button>
+
+              <button
+                onClick={() => setReplyOpen(replyOpen === d.id ? null : d.id)}
+                className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border transition ${
+                  replyOpen === d.id
+                    ? "bg-blue-50 border-blue-200 text-blue-600"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <FiMessageCircle size={16} />
+                Reply ({d.replies ? d.replies.length : 0})
+              </button>
+
+              {d.status !== "resolved" && (
+                <button
+                  onClick={() => resolve(d.id)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-green-200 text-green-700 hover:bg-green-50 transition"
+                >
+                  <FiCheckCircle size={16} />
+                  Resolve
+                </button>
+              )}
+
+              <button
+                onClick={() => deleteDoubt(d.id)}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-transparent text-gray-400 hover:text-red-500 transition ml-auto"
+                title="Delete functionality unavailable"
+              >
+                <FiTrash2 size={16} />
+              </button>
+            </div>
+
+            {/* REPLY SECTION */}
+            {replyOpen === d.id && (
+              <div className="mt-4 animate-in slide-in-from-top-2 fade-in">
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                        value={teacherMsg}
-                        onChange={(e) => setTeacherMsg(e.target.value)}
-                        placeholder="Type a message..."
-                        className="flex-1 border rounded-lg p-2"
-                    />
-
-                    <button
-                        type="submit"
-                        className="px-4 py-2 rounded-lg border bg-blue-100 text-blue-800 hover:bg-blue-200 transition flex items-center gap-2"
-                    >
-                        <FiSend size={16} />
-                        Send
-                    </button>
+                  <input
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Write a clear explanation..."
+                    className="flex-1 border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => submitReply(d.id)}
+                    disabled={replyingId === d.id}
+                    className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {replyingId === d.id ? (
+                      "Sending..."
+                    ) : (
+                      <>
+                        <FiSend size={16} /> Send
+                      </>
+                    )}
+                  </button>
                 </div>
-            </form>
-
-            {/* DOUBTS LIST */}
-            <h2 className="text-2xl font-bold">Student Doubts</h2>
-
-            {doubts.length === 0 && (
-                <div className="p-8 text-slate-500 bg-white border rounded-xl text-center">
-                    No doubts yet.
-                </div>
+              </div>
             )}
 
-            <div className="space-y-4">
-                {doubts.map((d) => (
-                    <div
-                        key={d.id}
-                        className="bg-white border rounded-xl p-5"
-                    >
-                        {/* HEADER */}
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <div className="font-semibold text-lg">
-                                    {d.student || "Student"}
-                                </div>
-                                <div className="text-slate-700 mt-1">
-                                    {d.text}
-                                </div>
-                            </div>
-
-                            <span
-                                className={`text-xs px-2 py-1 rounded-full uppercase tracking-wide ${d.status === "resolved"
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-amber-100 text-amber-700"
-                                    }`}
-                            >
-                                {d.status || "open"}
-                            </span>
-                        </div>
-
-                        {/* ACTION BUTTONS */}
-                        <div className="flex flex-wrap gap-2 mt-3">
-
-                            {/* LIKE */}
-                            <button
-                                onClick={() => like(d.id)}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border bg-pink-100 text-pink-700"
-                            >
-                                <FiThumbsUp size={16} />
-                                Like
-                            </button>
-
-                            {/* REPLY */}
-                            <button
-                                onClick={() => setReplyOpen(replyOpen === d.id ? null : d.id)}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border bg-blue-100 text-blue-800"
-                            >
-                                <FiMessageCircle size={16} />
-                                Reply
-                            </button>
-
-                            {/* RESOLVE */}
-                            <button
-                                onClick={() => resolve(d.id)}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border bg-green-100 text-green-800"
-                            >
-                                <FiCheckCircle size={16} />
-                                Resolve
-                            </button>
-
-                            {/* DELETE */}
-                            <button
-                                onClick={() => deleteDoubt(d.id)}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border bg-red-100 text-red-800"
-                            >
-                                <FiTrash2 size={16} />
-                                Delete
-                            </button>
-                        </div>
-
-                        {/* REPLY SECTION */}
-                        {replyOpen === d.id && (
-                            <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                                <input
-                                    value={replyText}
-                                    onChange={(e) => setReplyText(e.target.value)}
-                                    placeholder="Write a reply..."
-                                    className="flex-1 border rounded-lg p-2"
-                                />
-                                <button
-                                    onClick={() => submitReply(d.id)}
-                                    className="px-4 py-2 border bg-indigo-100 text-indigo-800 rounded-lg transition flex items-center gap-2"
-                                >
-                                    <FiSend size={16} />
-                                    Send
-                                </button>
-                            </div>
-                        )}
-
-                        {/* REPLIES */}
-                        {d.replies?.length > 0 && (
-                            <div className="mt-4 border-t pt-3 space-y-2">
-                                <div className="font-medium text-sm mb-1">
-                                    Replies
-                                </div>
-
-                                {d.replies.map((r) => (
-                                    <div
-                                        key={r.id}
-                                        className="bg-slate-50 border rounded-lg p-2"
-                                    >
-                                        <div className="text-sm">{r.text}</div>
-                                        <div className="text-[10px] text-slate-500 mt-1">
-                                            {new Date(r.at).toLocaleString()}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+            {/* REPLIES LIST */}
+            {d.replies?.length > 0 && (
+              <div className="mt-4 space-y-3 bg-gray-50 rounded-xl p-4">
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  Discussion Thread
+                </div>
+                {d.replies.map((r, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white border border-gray-100 rounded-lg p-3 shadow-sm"
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-bold text-blue-600">
+                        {r.userName || r.by || "Teacher"}
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        {r.createdAt
+                          ? new Date(
+                              r.createdAt._seconds * 1000
+                            ).toLocaleString()
+                          : r.at
+                          ? new Date(r.at).toLocaleString()
+                          : ""}
+                      </span>
                     </div>
+                    <div className="text-sm text-gray-800 mt-1">
+                      {r.messageText || r.text}
+                    </div>
+                  </div>
                 ))}
-            </div>
-        </div>
-    );
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
