@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { teacherDashbaord } from "@/api/teacher";
+import React, { useEffect, useState } from "react";
 import {
   FiUpload,
   FiVideo,
@@ -21,6 +22,16 @@ import {
 
 export default function Overview({ user, setActive = () => {} }) {
   const [showProfile, setShowProfile] = useState(false);
+  const [teacherData, setTeacherData] = useState([]);
+  useEffect(() => {
+    const teacherData = async () => {
+      try {
+        const response = await teacherDashbaord();
+        setTeacherData(response.data);
+      } catch (error) {}
+    };
+    teacherData();
+  }, []);
 
   // Default expert (override by passing user prop)
   const expert = user || {
@@ -81,8 +92,12 @@ export default function Overview({ user, setActive = () => {} }) {
 
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex flex-col items-end text-right">
-            <span className="text-sm font-medium text-gray-700">{expert.name}</span>
-            <span className="text-xs text-gray-500">{expert.subject}</span>
+            <span className="text-sm font-medium text-gray-700">
+              {teacherData?.teacherName}
+            </span>
+            <span className="text-xs text-gray-500">
+              {teacherData?.subject}
+            </span>
           </div>
 
           <button
@@ -105,7 +120,9 @@ export default function Overview({ user, setActive = () => {} }) {
             </div>
             <div>
               <h3 className="font-semibold">Total Students</h3>
-              <p className="text-gray-600 text-sm">168</p>
+              <p className="text-gray-600 text-sm">
+                {teacherData?.quickStats?.studentsCount}
+              </p>
             </div>
           </div>
         </div>
@@ -117,7 +134,9 @@ export default function Overview({ user, setActive = () => {} }) {
             </div>
             <div>
               <h3 className="font-semibold">Active Courses</h3>
-              <p className="text-gray-600 text-sm">3 Running</p>
+              <p className="text-gray-600 text-sm">
+                {teacherData?.quickStats?.coursesCount}
+              </p>
             </div>
           </div>
         </div>
@@ -129,7 +148,9 @@ export default function Overview({ user, setActive = () => {} }) {
             </div>
             <div>
               <h3 className="font-semibold">Avg Quiz Score</h3>
-              <p className="text-gray-600 text-sm">82.5%</p>
+              <p className="text-gray-600 text-sm">
+                {teacherData?.quickStats?.quizzesCount}
+              </p>
             </div>
           </div>
         </div>
@@ -142,7 +163,7 @@ export default function Overview({ user, setActive = () => {} }) {
           <button
             type="button"
             onClick={() => setActive("uploads")}
-            className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex flex-col items-center gap-2 font-semibold"
+            className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex flex-col items-center gap-2 font-semibold cursor-pointer"
           >
             <FiUpload size={24} /> Upload Resource
           </button>
@@ -150,7 +171,7 @@ export default function Overview({ user, setActive = () => {} }) {
           <button
             type="button"
             onClick={() => setActive("recorded")}
-            className="p-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl flex flex-col items-center gap-2 font-semibold"
+            className="p-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl flex flex-col items-center gap-2 font-semibold cursor-pointer"
           >
             <FiFileText size={24} /> Recorded Sessions
           </button>
@@ -158,7 +179,7 @@ export default function Overview({ user, setActive = () => {} }) {
           <button
             type="button"
             onClick={() => setActive("liveClass")}
-            className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-xl flex flex-col items-center gap-2 font-semibold"
+            className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-xl flex flex-col items-center gap-2 font-semibold cursor-pointer"
           >
             <FiVideo size={24} /> Start Live Class
           </button>
@@ -167,9 +188,16 @@ export default function Overview({ user, setActive = () => {} }) {
 
       {/* Profile Modal */}
       {showProfile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+        >
           {/* backdrop */}
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowProfile(false)} />
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowProfile(false)}
+          />
 
           <div className="relative z-50 max-w-lg w-full bg-white rounded-xl shadow-lg overflow-auto">
             {/* Profile Header */}
@@ -181,7 +209,9 @@ export default function Overview({ user, setActive = () => {} }) {
                 <div>
                   <div className="font-semibold">{expert.name}</div>
                   <div className="text-sm text-gray-500">{expert.email}</div>
-                  <div className="text-xs text-gray-400">Subject: {expert.subject}</div>
+                  <div className="text-xs text-gray-400">
+                    Subject: {expert.subject}
+                  </div>
                 </div>
               </div>
 
@@ -190,9 +220,10 @@ export default function Overview({ user, setActive = () => {} }) {
                 <button
                   type="button"
                   onClick={() => {
-                    const url = expert.completedCourses && expert.completedCourses.length
-                      ? expert.completedCourses[0].certificateUrl
-                      : "/sample-certificate.pdf";
+                    const url =
+                      expert.completedCourses && expert.completedCourses.length
+                        ? expert.completedCourses[0].certificateUrl
+                        : "/sample-certificate.pdf";
                     const filename = url.split("/").pop() || "certificate.pdf";
                     downloadFile(url, filename);
                   }}
@@ -216,32 +247,56 @@ export default function Overview({ user, setActive = () => {} }) {
 
             {/* CERTIFICATE OF EXCELLENCE IN TEACHING */}
             <div className="p-4">
-              <h4 className="font-semibold mb-3">Certificate of Excellence in Teaching</h4>
+              <h4 className="font-semibold mb-3">
+                Certificate of Excellence in Teaching
+              </h4>
 
-              {(!expert.completedCourses || expert.completedCourses.length === 0) ? (
-                <div className="text-sm text-gray-600">No certificates available.</div>
+              {!expert.completedCourses ||
+              expert.completedCourses.length === 0 ? (
+                <div className="text-sm text-gray-600">
+                  No certificates available.
+                </div>
               ) : (
                 <div className="space-y-3">
                   {/* show excellence certificates first */}
                   {expert.completedCourses
-                    .filter(c => c.title.toLowerCase().includes("excellence"))
+                    .filter((c) => c.title.toLowerCase().includes("excellence"))
                     .map((c) => (
-                      <div key={c.id} className="flex items-center gap-3 p-3 border rounded bg-gradient-to-r from-yellow-50 to-white">
+                      <div
+                        key={c.id}
+                        className="flex items-center gap-3 p-3 border rounded bg-gradient-to-r from-yellow-50 to-white"
+                      >
                         <div className="w-20 h-14 bg-yellow-100 rounded flex items-center justify-center text-xs font-semibold text-gray-700">
                           EX
                         </div>
 
                         <div className="flex-1">
                           <div className="font-medium">{c.title}</div>
-                          <div className="text-xs text-gray-500">Awarded: {c.date}</div>
-                          {c.award && <div className="text-xs text-indigo-600 mt-1">Reason: {c.award}</div>}
-                          {c.sessions !== undefined && <div className="text-xs text-gray-500 mt-0.5">Teaching sessions: {c.sessions}</div>}
+                          <div className="text-xs text-gray-500">
+                            Awarded: {c.date}
+                          </div>
+                          {c.award && (
+                            <div className="text-xs text-indigo-600 mt-1">
+                              Reason: {c.award}
+                            </div>
+                          )}
+                          {c.sessions !== undefined && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Teaching sessions: {c.sessions}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => window.open(c.certificateUrl || "#", "_blank", "noopener,noreferrer")}
+                            onClick={() =>
+                              window.open(
+                                c.certificateUrl || "#",
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
                             className="px-3 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-1 text-sm"
                           >
                             <FiEye /> View
@@ -250,7 +305,9 @@ export default function Overview({ user, setActive = () => {} }) {
                           <button
                             type="button"
                             onClick={() => {
-                              const filename = (c.certificateUrl || "#").split("/").pop() || "certificate.pdf";
+                              const filename =
+                                (c.certificateUrl || "#").split("/").pop() ||
+                                "certificate.pdf";
                               downloadFile(c.certificateUrl || "#", filename);
                             }}
                             className="px-3 py-2 bg-green-600 text-white rounded-lg flex items-center gap-1 text-sm"
@@ -263,24 +320,49 @@ export default function Overview({ user, setActive = () => {} }) {
 
                   {/* remaining certificates */}
                   {expert.completedCourses
-                    .filter(c => !c.title.toLowerCase().includes("excellence"))
+                    .filter(
+                      (c) => !c.title.toLowerCase().includes("excellence")
+                    )
                     .map((c) => (
-                      <div key={c.id} className="flex items-center gap-3 p-3 border rounded bg-gray-50">
+                      <div
+                        key={c.id}
+                        className="flex items-center gap-3 p-3 border rounded bg-gray-50"
+                      >
                         <div className="w-20 h-14 bg-gray-100 rounded flex items-center justify-center text-xs font-semibold text-gray-600">
-                          {c.title.split(" ").slice(0, 2).map((s) => s[0]).join("")}
+                          {c.title
+                            .split(" ")
+                            .slice(0, 2)
+                            .map((s) => s[0])
+                            .join("")}
                         </div>
 
                         <div className="flex-1">
                           <div className="font-medium">{c.title}</div>
-                          <div className="text-xs text-gray-500">Completed: {c.date}</div>
-                          {c.award && <div className="text-xs text-indigo-600 mt-1">Award: {c.award}</div>}
-                          {c.sessions !== undefined && <div className="text-xs text-gray-500 mt-0.5">Teaching sessions: {c.sessions}</div>}
+                          <div className="text-xs text-gray-500">
+                            Completed: {c.date}
+                          </div>
+                          {c.award && (
+                            <div className="text-xs text-indigo-600 mt-1">
+                              Award: {c.award}
+                            </div>
+                          )}
+                          {c.sessions !== undefined && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Teaching sessions: {c.sessions}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => window.open(c.certificateUrl || "#", "_blank", "noopener,noreferrer")}
+                            onClick={() =>
+                              window.open(
+                                c.certificateUrl || "#",
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
                             className="px-3 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-1 text-sm"
                           >
                             <FiEye /> View
@@ -289,7 +371,9 @@ export default function Overview({ user, setActive = () => {} }) {
                           <button
                             type="button"
                             onClick={() => {
-                              const filename = (c.certificateUrl || "#").split("/").pop() || "certificate.pdf";
+                              const filename =
+                                (c.certificateUrl || "#").split("/").pop() ||
+                                "certificate.pdf";
                               downloadFile(c.certificateUrl || "#", filename);
                             }}
                             className="px-3 py-2 bg-green-600 text-white rounded-lg flex items-center gap-1 text-sm"
@@ -304,7 +388,13 @@ export default function Overview({ user, setActive = () => {} }) {
             </div>
 
             <div className="p-3 border-t text-right">
-              <button type="button" onClick={() => setShowProfile(false)} className="px-4 py-2 bg-gray-100 rounded">Close</button>
+              <button
+                type="button"
+                onClick={() => setShowProfile(false)}
+                className="px-4 py-2 bg-gray-100 rounded"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

@@ -1,106 +1,91 @@
 import React, { useState, useEffect } from "react";
-import { FiArrowRight } from "react-icons/fi";
 import InputField from "./InputField";
+import { registerStudent, getOrgList } from "../../api/auth";
 
 const StudentForm = ({ onRegisterSuccess, showToast }) => {
   const [formData, setFormData] = useState({
     studentName: "",
-    org: "",
+    orgCode: "",
     subject: "",
     email: "",
-    password: "",
   });
 
   const [errors, setErrors] = useState({});
-  const [availableSubjects, setAvailableSubjects] = useState([]);
-  const [loadingSubjects, setLoadingSubjects] = useState(false);
-
-  // Institution dropdown (NO "Others")
-  const organizations = [
-    "Presidency University",
-    "Jain University",
-    "Rural Polytechnic College",
+  const [organizations, setOrganizations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingOrgs, setLoadingOrgs] = useState(true);
+  const subjects = [
+    { subject: "AI" },
+    { subject: "VLSI" },
+    { subject: "Renewable Energy" },
+    { subject: "Others" },
   ];
 
-  // Local fallback subjects (used if backend fetch fails)
-  const FALLBACK_SUBJECTS = ["AI", "VLSI", "Renewable Energy"];
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    // if org changes, clear selected subject
-    if (name === "org") {
-      setFormData((prev) => ({ ...prev, org: value, subject: "" }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
-  };
-
-  // fetch available subjects for selected org
   useEffect(() => {
-    if (!formData.org) {
-      setAvailableSubjects([]);
-      return;
-    }
-
-    let cancelled = false;
-    const fetchSubjects = async () => {
-      setLoadingSubjects(true);
+    const fetchOrganizations = async () => {
       try {
-        const res = await fetch(
-          `/api/org/${encodeURIComponent(formData.org)}/subjects`
-        );
-        if (!res.ok) throw new Error("bad response");
-        const data = await res.json();
-        if (!cancelled) {
-          if (Array.isArray(data.subjects) && data.subjects.length > 0) {
-            setAvailableSubjects(data.subjects);
-          } else {
-            setAvailableSubjects(FALLBACK_SUBJECTS);
-          }
+        const response = await getOrgList();
+        if (response.status === 200) {
+          setOrganizations(response.data.organizations || []);
         }
-      } catch (err) {
-        // fallback if backend not ready / network error
-        if (!cancelled) setAvailableSubjects(FALLBACK_SUBJECTS);
+      } catch {
+        showToast("error", "Failed to load organizations");
       } finally {
-        if (!cancelled) setLoadingSubjects(false);
+        setLoadingOrgs(false);
       }
     };
 
-    fetchSubjects();
+    fetchOrganizations();
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [formData.org]);
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const validate = () => {
     const newErrors = {};
-    if (!formData.studentName.trim()) newErrors.studentName = "Student name is required.";
-    if (!formData.org.trim()) newErrors.org = "Select institution.";
-    // subject must be chosen once org is selected (subject dropdown is shown only after org)
-    if (formData.org && !formData.subject.trim()) newErrors.subject = "Please select a subject.";
-    if (!formData.email.trim()) newErrors.email = "Email is required.";
-    if (!formData.password.trim()) newErrors.password = "Password is required.";
+    if (!formData.studentName.trim())
+      newErrors.studentName = "Student name is required";
+    if (!formData.orgCode.trim()) newErrors.orgCode = "Select organization";
+    if (!formData.subject.trim()) newErrors.subject = "Subject is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      showToast("error", "Please fill all required fields");
+      return;
+    }
 
-    showToast(
-      "success",
-      `Student "${formData.studentName}" registered in ${formData.org} for ${formData.subject}.`
-    );
+    setLoading(true);
+    try {
+      const response = await registerStudent(formData);
 
-    onRegisterSuccess && onRegisterSuccess("login");
+      if (response.status === 201) {
+        showToast(
+          "success",
+          "Registration submitted! Wait for organization approval."
+        );
+        onRegisterSuccess("login");
+      } else {
+        showToast("error", response.data.message || "Registration failed");
+      }
+    } catch (error) {
+      const message =
+        error.response?.data?.message || "Server error. Please try again.";
+      showToast("error", message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4 mt-3 text-xs md:text-sm">
-      {/* Student Name */}
+    <form onSubmit={submit} className="space-y-4 mt-3 text-xs md:text-sm px-2">
       <InputField
         label="Student Name"
         name="studentName"
@@ -110,66 +95,69 @@ const StudentForm = ({ onRegisterSuccess, showToast }) => {
         error={errors.studentName}
       />
 
-      {/* Institution / College */}
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] text-gray-300 font-semibold">Institution / College</label>
+        <label className="text-[11px] text-gray-300 font-semibold">
+          Organization
+        </label>
 
         <select
-          name="org"
-          value={formData.org}
+          name="orgCode"
+          value={formData.orgCode}
           onChange={handleChange}
-          className={`w-full text-gray-100 px-3 py-2 rounded-md text-xs appearance-none
-            border ${errors.org ? "border-red-500" : "border-gray-700"}
-            bg-gradient-to-r from-[#07182a] via-[#0b2230] to-[#0f2b39]
-            hover:from-[#0b2230] hover:to-[#113544]
-            focus:ring-2 focus:ring-emerald-500 transition-all duration-150`}
+          disabled={loadingOrgs}
+          className={`w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 dark:bg-gray-800/80 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 transition text-sm`}
         >
           <option className="bg-[#0d0d0e] text-gray-200" value="">
-            -- Select College --
+            {loadingOrgs ? "Loading..." : "-- Select Organization --"}
           </option>
-          {organizations.map((o) => (
-            <option key={o} value={o} className="bg-[#0d0d0e] text-gray-200">
-              {o}
+          {organizations.map((org) => (
+            <option
+              key={org.orgCode}
+              value={org.orgCode}
+              className="bg-[#0d0d0e] text-gray-200"
+            >
+              {org.orgName} ({org.orgCode})
             </option>
           ))}
         </select>
 
-        {errors.org && <span className="text-[10px] text-red-400">{errors.org}</span>}
+        {errors.orgCode && (
+          <span className="text-[10px] text-red-400">{errors.orgCode}</span>
+        )}
       </div>
 
-      {/* Subject: only shown after organization selected */}
-      {formData.org && (
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] text-gray-300 font-semibold">Subject</label>
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] text-gray-300 font-semibold">
+          Subjects
+        </label>
 
-          <select
-            name="subject"
-            value={formData.subject}
-            onChange={handleChange}
-            disabled={loadingSubjects}
-            className={`w-full text-gray-100 px-3 py-2 rounded-md text-xs appearance-none
-              border ${errors.subject ? "border-red-500" : "border-gray-700"}
-              bg-gradient-to-r from-[#07182a] via-[#0b2230] to-[#0f2b39]
-              hover:from-[#0b2230] hover:to-[#113544]
-              focus:ring-2 focus:ring-emerald-500 transition-all duration-150 ${loadingSubjects ? "opacity-70" : ""
-            }`}
-          >
-            <option className="bg-[#0d0d0e] text-gray-200" value="">
-              {loadingSubjects ? "Loading subjects..." : "-- Choose Subject --"}
+        <select
+          name="subject"
+          value={formData.subject}
+          onChange={handleChange}
+          className={`w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 dark:bg-gray-800/80 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 transition text-sm
+    `}
+        >
+          <option className="bg-[#0d0d0e] text-gray-200" value="">
+            -- Select Subject --
+          </option>
+
+          {subjects.map((sub) => (
+            <option
+              key={sub.subject}
+              value={sub.subject}
+              className="bg-[#0d0d0e] text-gray-200"
+            >
+              {sub.subject}
             </option>
+          ))}
+        </select>
 
-            {availableSubjects.map((s) => (
-              <option key={s} value={s} className="bg-[#0d0d0e] text-gray-200">
-                {s}
-              </option>
-            ))}
-          </select>
+        {errors.subject && (
+          <span className="text-[10px] text-red-400">{errors.subject}</span>
+        )}
+      </div>
 
-          {errors.subject && <span className="text-[10px] text-red-400">{errors.subject}</span>}
-        </div>
-      )}
-
-      {/* Email */}
       <InputField
         label="Email"
         type="email"
@@ -180,25 +168,12 @@ const StudentForm = ({ onRegisterSuccess, showToast }) => {
         error={errors.email}
       />
 
-      {/* Password */}
-      <InputField
-        label="Password"
-        type="password"
-        name="password"
-        placeholder="Create password"
-        value={formData.password}
-        onChange={handleChange}
-        error={errors.password}
-        showTogglePassword
-      />
-
-      {/* Submit */}
       <button
         type="submit"
-        className="w-full p-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-lg text-xs font-semibold flex items-center justify-center gap-2 mt-2"
+        disabled={loading || loadingOrgs}
+        className="w-full p-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-xs font-semibold flex items-center justify-center gap-2 mt-2 transition"
       >
-        Submit
-        <FiArrowRight className="w-4 h-4" />
+        {loading ? "Submitting..." : "Request For Approval"}
       </button>
     </form>
   );

@@ -29,14 +29,16 @@ import TeacherAnalytics from "./components/TeacherAnalytics";
 import LiveClassRoom from "./components/LiveClassRoom";
 
 import NavButton from "./components/ui/NavButton";
+import { logoutUser } from "@/api/auth";
+import { useNavigate } from "react-router-dom";
 
 export default function TeacherDashboard() {
   // Load saved org/teacher name from localStorage
+  const navigate = useNavigate();
   const organizationName =
     localStorage.getItem("organizationName") || "My Organization";
 
-  const teacherName =
-    localStorage.getItem("teacherName") || "Demo Teacher";
+  const teacherName = localStorage.getItem("teacherName") || "Demo Teacher";
 
   const user = {
     name: teacherName,
@@ -51,6 +53,7 @@ export default function TeacherDashboard() {
   const [active, setActive] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const content = useMemo(() => {
     switch (active) {
@@ -79,8 +82,15 @@ export default function TeacherDashboard() {
     }
   }, [active]);
 
-  const logout = () => {
-    alert("Logged out (demo)");
+  const logout = async () => {
+    setLoading(true);
+    try {
+      const response = await logoutUser();
+      if (response.status === 200) {
+        setLoading(false);
+        navigate("/");
+      }
+    } catch (error) {}
   };
 
   const handleNavClick = (key) => {
@@ -96,8 +106,6 @@ export default function TeacherDashboard() {
       `}</style>
 
       <div className="h-screen flex overflow-hidden bg-gradient-to-br from-slate-50 to-indigo-50">
-
-
         {/* ---------------- MOBILE MENU BUTTON ---------------- */}
         {!mobileMenuOpen && (
           <button
@@ -108,7 +116,6 @@ export default function TeacherDashboard() {
           </button>
         )}
 
-
         {/* ---------------- MOBILE OVERLAY ---------------- */}
         {mobileMenuOpen && (
           <div
@@ -117,14 +124,12 @@ export default function TeacherDashboard() {
           />
         )}
 
-
         {/* ---------------- MOBILE SIDEBAR ---------------- */}
         <div
           className={`fixed top-0 right-0 z-50 h-full w-64 transition-transform duration-300 md:hidden
             ${mobileMenuOpen ? "translate-x-0" : "translate-x-full"}`}
         >
           <aside className="h-full bg-[rgba(40,43,252,0.94)] backdrop-blur-lg text-white flex flex-col">
-
             {/* ORG NAME (Mobile) */}
             <div className="p-4 flex items-center justify-between h-20">
               <div>
@@ -142,23 +147,76 @@ export default function TeacherDashboard() {
 
             <div className="flex-1 overflow-y-auto px-3 pb-6">
               {/* NAV ITEMS */}
-              <NavButton label="Overview" icon={FiGrid} active={active === "overview"} onClick={() => handleNavClick("overview")} />
-              <NavButton label="Courses" icon={FiBook} active={active === "courses"} onClick={() => handleNavClick("courses")} />
-              <NavButton label="Uploads" icon={FiUpload} active={active === "uploads"} onClick={() => handleNavClick("uploads")} />
-              <NavButton label="Recorded" icon={FiVideo} active={active === "recorded"} onClick={() => handleNavClick("recorded")} />
-              <NavButton label="AI Studio" icon={FiZap} active={active === "ai"} onClick={() => handleNavClick("ai")} />
+              <NavButton
+                label="Overview"
+                icon={FiGrid}
+                active={active === "overview"}
+                onClick={() => handleNavClick("overview")}
+              />
+              <NavButton
+                label="Courses"
+                icon={FiBook}
+                active={active === "courses"}
+                onClick={() => handleNavClick("courses")}
+              />
+              <NavButton
+                label="Uploads"
+                icon={FiUpload}
+                active={active === "uploads"}
+                onClick={() => handleNavClick("uploads")}
+              />
+              <NavButton
+                label="Recorded"
+                icon={FiVideo}
+                active={active === "recorded"}
+                onClick={() => handleNavClick("recorded")}
+              />
+              <NavButton
+                label="AI Studio"
+                icon={FiZap}
+                active={active === "ai"}
+                onClick={() => handleNavClick("ai")}
+              />
 
               <div className="border-t border-white/20 mt-3 pt-3" />
 
-              <NavButton label="Live Class" icon={FiVideo} active={active === "liveClass"} onClick={() => handleNavClick("liveClass")} />
-              <NavButton label="Quizzes" icon={FiPlus} active={active === "quizzes"} onClick={() => handleNavClick("quizzes")} />
-              <NavButton label="Responses" icon={FiFileText} active={active === "responses"} onClick={() => handleNavClick("responses")} />
-              <NavButton label="Discussions" icon={FiMessageCircle} active={active === "discussion"} onClick={() => handleNavClick("discussion")} />
-              <NavButton label="Analytics" icon={FiBarChart2} active={active === "analytics"} onClick={() => handleNavClick("analytics")} />
+              <NavButton
+                label="Live Class"
+                icon={FiVideo}
+                active={active === "liveClass"}
+                onClick={() => handleNavClick("liveClass")}
+              />
+              <NavButton
+                label="Quizzes"
+                icon={FiPlus}
+                active={active === "quizzes"}
+                onClick={() => handleNavClick("quizzes")}
+              />
+              <NavButton
+                label="Responses"
+                icon={FiFileText}
+                active={active === "responses"}
+                onClick={() => handleNavClick("responses")}
+              />
+              <NavButton
+                label="Discussions"
+                icon={FiMessageCircle}
+                active={active === "discussion"}
+                onClick={() => handleNavClick("discussion")}
+              />
+              <NavButton
+                label="Analytics"
+                icon={FiBarChart2}
+                active={active === "analytics"}
+                onClick={() => handleNavClick("analytics")}
+              />
             </div>
 
             <div className="p-4 border-t border-white/10">
-              <button className="w-full flex items-center gap-2 p-2 bg-red-500/30 hover:bg-red-500/50 rounded-lg transition">
+              <button
+                className="w-full flex items-center gap-2 p-2 bg-red-500/30 hover:bg-red-500/50 rounded-lg transition"
+                onClick={logout}
+              >
                 <FiLogOut />
                 Logout
               </button>
@@ -166,14 +224,12 @@ export default function TeacherDashboard() {
           </aside>
         </div>
 
-
         {/* ---------------- DESKTOP SIDEBAR ---------------- */}
         <aside
           className={`hidden md:flex flex-col bg-[rgba(40,43,252,0.64)] backdrop-blur-lg shadow-lg border-r border-white/10 h-screen transition-all duration-300 ${
             sidebarOpen ? "w-72" : "w-20"
           }`}
         >
-
           {/* ORGANIZATION NAME */}
           <div className="p-4 flex items-center justify-between h-20">
             {sidebarOpen && (
@@ -199,19 +255,79 @@ export default function TeacherDashboard() {
 
           {/* NAVIGATION LIST */}
           <div className="flex-1 overflow-y-auto px-3 space-y-2 pb-4">
-            <NavButton label="Overview" icon={FiGrid} active={active === "overview"} onClick={() => setActive("overview")} collapsed={!sidebarOpen} />
-            <NavButton label="Courses" icon={FiBook} active={active === "courses"} onClick={() => setActive("courses")} collapsed={!sidebarOpen} />
-            <NavButton label="Uploads" icon={FiUpload} active={active === "uploads"} onClick={() => setActive("uploads")} collapsed={!sidebarOpen} />
-            <NavButton label="Recorded" icon={FiVideo} active={active === "recorded"} onClick={() => setActive("recorded")} collapsed={!sidebarOpen} />
-            <NavButton label="AI Studio" icon={FiZap} active={active === "ai"} onClick={() => setActive("ai")} collapsed={!sidebarOpen} />
+            <NavButton
+              label="Overview"
+              icon={FiGrid}
+              active={active === "overview"}
+              onClick={() => setActive("overview")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="Courses"
+              icon={FiBook}
+              active={active === "courses"}
+              onClick={() => setActive("courses")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="Uploads"
+              icon={FiUpload}
+              active={active === "uploads"}
+              onClick={() => setActive("uploads")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="Recorded"
+              icon={FiVideo}
+              active={active === "recorded"}
+              onClick={() => setActive("recorded")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="AI Studio"
+              icon={FiZap}
+              active={active === "ai"}
+              onClick={() => setActive("ai")}
+              collapsed={!sidebarOpen}
+            />
 
             <div className="border-t border-white/20 pt-3" />
 
-            <NavButton label="Live Class" icon={FiVideo} active={active === "liveClass"} onClick={() => setActive("liveClass")} collapsed={!sidebarOpen} />
-            <NavButton label="Quizzes" icon={FiPlus} active={active === "quizzes"} onClick={() => setActive("quizzes")} collapsed={!sidebarOpen} />
-            <NavButton label="Responses" icon={FiFileText} active={active === "responses"} onClick={() => setActive("responses")} collapsed={!sidebarOpen} />
-            <NavButton label="Discussions" icon={FiMessageCircle} active={active === "discussion"} onClick={() => setActive("discussion")} collapsed={!sidebarOpen} />
-            <NavButton label="Analytics" icon={FiBarChart2} active={active === "analytics"} onClick={() => setActive("analytics")} collapsed={!sidebarOpen} />
+            <NavButton
+              label="Live Class"
+              icon={FiVideo}
+              active={active === "liveClass"}
+              onClick={() => setActive("liveClass")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="Quizzes"
+              icon={FiPlus}
+              active={active === "quizzes"}
+              onClick={() => setActive("quizzes")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="Responses"
+              icon={FiFileText}
+              active={active === "responses"}
+              onClick={() => setActive("responses")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="Discussions"
+              icon={FiMessageCircle}
+              active={active === "discussion"}
+              onClick={() => setActive("discussion")}
+              collapsed={!sidebarOpen}
+            />
+            <NavButton
+              label="Analytics"
+              icon={FiBarChart2}
+              active={active === "analytics"}
+              onClick={() => setActive("analytics")}
+              collapsed={!sidebarOpen}
+            />
           </div>
 
           {/* LOGOUT */}
@@ -226,11 +342,9 @@ export default function TeacherDashboard() {
           </div>
         </aside>
 
-
         {/* ---------------- MAIN CONTENT ---------------- */}
         <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen">
           <header className="flex items-center justify-between mb-6">
-
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 capitalize">
               {active.replace(/([A-Z])/g, " $1")}
             </h1>

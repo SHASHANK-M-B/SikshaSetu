@@ -1,61 +1,86 @@
-import React, { useState } from "react";
-import { FiArrowRight } from "react-icons/fi";
+import React, { useState, useEffect } from "react";
 import InputField from "./InputField";
+import { registerTeacher, getOrgList } from "../../api/auth";
 
 const TeacherForm = ({ onRegisterSuccess, showToast }) => {
   const [formData, setFormData] = useState({
     name: "",
-    org: "",
+    orgCode: "",
     subject: "",
-    customSubject: "",
     email: "",
-    password: "",
   });
 
   const [errors, setErrors] = useState({});
-
-  const organizations = [
-    "Presidency University",
-    "Jain University",
-    "Rural Polytechnic College",
+  const [organizations, setOrganizations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingOrgs, setLoadingOrgs] = useState(true);
+  const subjects = [
+    { subject: "AI" },
+    { subject: "VLSI" },
+    { subject: "Renewable Energy" },
+    { subject: "Others" },
   ];
 
-  const subjects = ["AI", "VLSI", "Renewable Energy", "Others"];
+  useEffect(() => {
+    const fetchOrganizations = async () => {
+      try {
+        const response = await getOrgList();
+        if (response.status === 200) {
+          setOrganizations(response.data.organizations || []);
+        }
+      } catch {
+        showToast("error", "Failed to load organizations");
+      } finally {
+        setLoadingOrgs(false);
+      }
+    };
+
+    fetchOrganizations();
+  }, []);
 
   const handleChange = (e) =>
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
   const validate = () => {
     let newErrors = {};
-    if (!formData.name.trim()) newErrors.name = "Name is required.";
-    if (!formData.org.trim()) newErrors.org = "Select institution.";
-    if (!formData.subject.trim()) newErrors.subject = "Select a subject.";
-    if (formData.subject === "Others" && !formData.customSubject.trim())
-      newErrors.customSubject = "Enter your subject.";
-    if (!formData.email.trim()) newErrors.email = "Email is required.";
-    if (!formData.password.trim()) newErrors.password = "Password is required.";
+    if (!formData.name.trim()) newErrors.name = "Name is required";
+    if (!formData.orgCode.trim()) newErrors.orgCode = "Select organization";
+    if (!formData.subject.trim()) newErrors.subject = "Subject is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      showToast("error", "Please fill all required fields");
+      return;
+    }
 
-    const finalSubject =
-      formData.subject === "Others" ? formData.customSubject : formData.subject;
-
-    showToast(
-      "success",
-      `Experts/Trainers "${formData.name}" registered for subject: ${finalSubject}`
-    );
-
-    onRegisterSuccess && onRegisterSuccess("login");
+    setLoading(true);
+    try {
+      const response = await registerTeacher(formData);
+      if (response.status === 201) {
+        showToast(
+          "success",
+          "Registration submitted! Wait for organization approval."
+        );
+        onRegisterSuccess("login");
+      } else {
+        showToast("error", response.data.message || "Registration failed");
+      }
+    } catch (error) {
+      const message =
+        error.response?.data?.message || "Server error. Please try again.";
+      showToast("error", message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4 mt-3 text-xs md:text-sm">
-      {/* NAME */}
+    <form onSubmit={submit} className="space-y-4 mt-3 text-xs md:text-sm px-2">
       <InputField
         label="Name"
         name="name"
@@ -65,57 +90,60 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
         error={errors.name}
       />
 
-      {/* INSTITUTION / COLLEGE — gradient front + dark options */}
       <div className="flex flex-col gap-1">
         <label className="text-[11px] text-gray-300 font-semibold">
-          Institution / College
+          Organization
         </label>
 
         <select
-          name="org"
-          value={formData.org}
+          name="orgCode"
+          value={formData.orgCode}
           onChange={handleChange}
-          className={`w-full text-gray-100 px-3 py-2 rounded-md text-xs appearance-none
-            border ${errors.org ? "border-red-500" : "border-gray-700"}
-            bg-gradient-to-r from-[#07182a] via-[#0b2230] to-[#0f2b39]
-            hover:from-[#0b2230] hover:to-[#113544]
-            focus:ring-2 focus:ring-emerald-500 transition-all duration-150`}
+          disabled={loadingOrgs}
+          className={`w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 dark:bg-gray-800/80 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 transition text-sm`}
         >
           <option className="bg-[#0d0d0e] text-gray-200" value="">
-            -- Select College --
+            {loadingOrgs ? "Loading..." : "-- Select Organization --"}
           </option>
-          {organizations.map((o) => (
-            <option key={o} value={o} className="bg-[#0d0d0e] text-gray-200">
-              {o}
+          {organizations.map((org) => (
+            <option
+              key={org.orgCode}
+              value={org.orgCode}
+              className="bg-[#0d0d0e] text-gray-200"
+            >
+              {org.orgName}
             </option>
           ))}
         </select>
 
-        {errors.org && (
-          <span className="text-[10px] text-red-400">{errors.org}</span>
+        {errors.orgCode && (
+          <span className="text-[10px] text-red-400">{errors.orgCode}</span>
         )}
       </div>
 
-      {/* SUBJECT — gradient front + dark options (keeps Others) */}
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] text-gray-300 font-semibold">Subject</label>
+        <label className="text-[11px] text-gray-300 font-semibold">
+          Subjects
+        </label>
 
         <select
           name="subject"
           value={formData.subject}
           onChange={handleChange}
-          className={`w-full text-gray-100 px-3 py-2 rounded-md text-xs appearance-none
-            border ${errors.subject ? "border-red-500" : "border-gray-700"}
-            bg-gradient-to-r from-[#07182a] via-[#0b2230] to-[#0f2b39]
-            hover:from-[#0b2230] hover:to-[#113544]
-            focus:ring-2 focus:ring-emerald-500 transition-all duration-150`}
+          className={`w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 dark:bg-gray-800/80 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 transition text-sm
+    `}
         >
           <option className="bg-[#0d0d0e] text-gray-200" value="">
             -- Select Subject --
           </option>
-          {subjects.map((s) => (
-            <option key={s} value={s} className="bg-[#0d0d0e] text-gray-200">
-              {s}
+
+          {subjects.map((sub) => (
+            <option
+              key={sub.subject}
+              value={sub.subject}
+              className="bg-[#0d0d0e] text-gray-200"
+            >
+              {sub.subject}
             </option>
           ))}
         </select>
@@ -125,19 +153,6 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
         )}
       </div>
 
-      {/* CUSTOM SUBJECT */}
-      {formData.subject === "Others" && (
-        <InputField
-          label="Your Subject"
-          name="customSubject"
-          placeholder="Ex: Robotics, NLP"
-          value={formData.customSubject}
-          onChange={handleChange}
-          error={errors.customSubject}
-        />
-      )}
-
-      {/* EMAIL */}
       <InputField
         label="Email"
         type="email"
@@ -148,25 +163,12 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
         error={errors.email}
       />
 
-      {/* PASSWORD */}
-      <InputField
-        label="Password"
-        type="password"
-        name="password"
-        placeholder="Create password"
-        value={formData.password}
-        onChange={handleChange}
-        error={errors.password}
-        showTogglePassword
-      />
-
-      {/* SUBMIT BUTTON */}
       <button
         type="submit"
-        className="w-full p-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-lg text-xs font-semibold flex items-center justify-center gap-2 mt-2"
+        disabled={loading || loadingOrgs}
+        className="w-full p-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-xs font-semibold flex items-center justify-center gap-2 mt-2 transition"
       >
-        Submit
-        <FiArrowRight className="w-4 h-4" />
+        {loading ? "Submitting..." : "Request For Approval"}
       </button>
     </form>
   );

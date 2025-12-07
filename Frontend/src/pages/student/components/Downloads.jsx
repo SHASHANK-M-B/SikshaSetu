@@ -1,6 +1,8 @@
 // components/Downloads.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Search, ChevronDown, Eye, CloudDownload } from "lucide-react";
+import { downloadAllResourcess, lessionBundles } from "@/api/student";
+import { all } from "axios";
 
 // Load downloads from local storage
 const loadDownloads = () => {
@@ -71,7 +73,7 @@ export default function Downloads() {
     () => [...new Set(downloads.map((d) => d.course))],
     [downloads]
   );
-
+  const [allResources, setAllResources] = useState([]);
   const dTime = (v) => (v ? new Date(v).getTime() : 0);
 
   const filtered = useMemo(() => {
@@ -150,6 +152,25 @@ export default function Downloads() {
     "External Links",
     "Images/Diagrams",
   ];
+
+  const getAllResources = async () => {
+    try {
+      const response = await downloadAllResourcess();
+      setAllResources(response.data.resources);
+    } catch (error) {}
+  };
+
+  const getLessionBundels = async () => {
+    try {
+      const response = await lessionBundles();
+      // setAllResources(response.data.resources);
+    } catch (error) {}
+  };
+
+  useEffect(() => {
+    getAllResources();
+    getLessionBundels();
+  }, []);
 
   return (
     <div className="min-h-screen w-full bg-gray-100 px-4 md:px-10 py-6">
@@ -250,35 +271,36 @@ export default function Downloads() {
           </thead>
 
           <tbody>
-            {filtered.map((item) => (
-              <tr key={item.id} className="border-b last:border-0">
-                <td className="p-3">{item.title}</td>
-                <td className="p-3">{item.course}</td>
-                <td className="p-3">{FORMAT_MAP[item.category]}</td>
+            {Array.isArray(allResources) &&
+              allResources.map((item) => (
+                <tr key={item.id} className="border-b last:border-0">
+                  <td className="p-3">{item.title}</td>
+                  <td className="p-3">{item.course}</td>
+                  <td className="p-3">{FORMAT_MAP[item.category]}</td>
 
-                {/* VIEW button */}
-                <td className="p-3">
-                  <button
-                    onClick={() => handleView(item)}
-                    className="p-2 rounded-lg bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center"
-                  >
-                    <Eye size={16} />
-                  </button>
-                </td>
+                  {/* VIEW button */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleView(item)}
+                      className="p-2 rounded-lg bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center"
+                    >
+                      <Eye size={16} />
+                    </button>
+                  </td>
 
-                {/* DOWNLOAD button */}
-                <td className="p-3">
-                  <button
-                    onClick={() => handleDownload(item)}
-                    className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center justify-center"
-                  >
-                    <CloudDownload size={18} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+                  {/* DOWNLOAD button */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleDownload(item)}
+                      className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center justify-center"
+                    >
+                      <CloudDownload size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
 
-            {filtered.length === 0 && (
+            {allResources.length === 0 && (
               <tr>
                 <td colSpan={5} className="text-center py-8 text-gray-400">
                   No resources found.
