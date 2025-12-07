@@ -1,7 +1,7 @@
 import client from "./client";
 
-export const uploadResources = (data) =>
-  client.post("/api/teacher/resource", data);
+// export const uploadResources = (data) =>
+//   client.post("/api/teacher/resource", data);
 
 export const teacherDashbaord = () => client.get("/api/teacher/dashboard");
 // courses
@@ -45,3 +45,4 @@ export const askAI = (query) => client.post(`/api/teacher/ai/ask`, { query });
 
 export const scheduleLiveClass = (data) =>
   client.post("/api/teacher/live-session/schedule", data);
+export const uploadResources = (data) => client.post("/api/teacher/resource",data);
