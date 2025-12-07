@@ -1,4 +1,5 @@
 import { getAllCourses } from "@/api/student";
+import { getCourses } from "@/api/teacher";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import { FiPlayCircle, FiPlusCircle } from "react-icons/fi";
 
@@ -13,26 +14,26 @@ export default function ViewCourses() {
     { code: "BUS310", name: "Business Strategy", instructor: "Mr. Albert" },
   ];
 
-//   const initialJoined = [
-//     {
-//       code: "CSE101",
-//       name: "Intro to Programming",
-//       progress: 70,
-//       instructor: "Dr. Sharma",
-//     },
-//     {
-//       code: "ENG201",
-//       name: "Communication Skills",
-//       progress: 40,
-//       instructor: "Prof. Kim",
-//     },
-//     {
-//       code: "MATH202",
-//       name: "Discrete Mathematics",
-//       progress: 90,
-//       instructor: "Dr. Anya",
-//     },
-//   ];
+  //   const initialJoined = [
+  //     {
+  //       code: "CSE101",
+  //       name: "Intro to Programming",
+  //       progress: 70,
+  //       instructor: "Dr. Sharma",
+  //     },
+  //     {
+  //       code: "ENG201",
+  //       name: "Communication Skills",
+  //       progress: 40,
+  //       instructor: "Prof. Kim",
+  //     },
+  //     {
+  //       code: "MATH202",
+  //       name: "Discrete Mathematics",
+  //       progress: 90,
+  //       instructor: "Dr. Anya",
+  //     },
+  //   ];
 
   const [joinedCourses, setJoinedCourses] = useState([]);
 
@@ -43,6 +44,18 @@ export default function ViewCourses() {
     };
     setJoinedCourses([...joinedCourses, newCourse]);
   };
+
+  const [courses, setCourses] = useState([]);
+  const getAllCourses = async () => {
+    const response = await getCourses();
+    setCourses(response.data.courses);
+    try {
+    } catch (error) {}
+  };
+
+  useEffect(() => {
+    getAllCourses();
+  }, []);
   const getListOfCourses = async () => {
     try {
       const response = await getAllCourses();

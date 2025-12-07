@@ -12,7 +12,7 @@ import { getStudentDashboard } from "@/api/student";
 
 export default function Overview({ studentDetails, quizItems }) {
   const pendingQuizzes = quizItems.filter((q) => q.status === "Pending").length;
-  console.log("Student Details in Overview:", studentDetails);
+
   const [studentDetailss, setStudentDetails] = useState(null);
   useEffect(() => {
     const fetchStudentDetails = async () => {

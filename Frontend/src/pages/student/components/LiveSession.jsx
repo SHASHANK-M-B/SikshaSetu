@@ -1,5 +1,4 @@
-import { joinLiveSession } from "@/api/student";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   FiThumbsUp,
   FiHelpCircle,
@@ -7,452 +6,406 @@ import {
   FiVolume2,
   FiVolumeX,
   FiDownload,
+  FiMic,
+  FiMicOff,
+  FiArrowLeft,
+  FiMessageSquare,
+  FiCalendar,
+  FiClock
 } from "react-icons/fi";
+import { io } from "socket.io-client";
+import { 
+  getStudentLiveSessions, 
+  joinSessionAPI, 
+  getSessionChat, 
+  sendChatMessage, 
+  markUnderstood,
+  getSessionMaterials
+} from "@/api/student";
 
-export default function LiveAudio() {
+export default function LiveSession() {
   const [joined, setJoined] = useState(false);
+  const [sessions, setSessions] = useState([]);
   const [activeClass, setActiveClass] = useState(null);
-  const [slideIndex, setSlideIndex] = useState(null);
-  const [micOn, setMicOn] = useState(false);
+  
+  // Real-time State
+  const [slideIndex, setSlideIndex] = useState(0); 
+  const [chatMessages, setChatMessages] = useState([]);
   const [msg, setMsg] = useState("");
+  
+  // Audio State
+  const [isMuted, setIsMuted] = useState(true);
+  const mediaStreamRef = useRef(null);
+  const socketRef = useRef(null);
+
   const [showDownloadPopup, setShowDownloadPopup] = useState(false);
-  const [liveClassess, SetLiveClasses] = useState([]);
+  const [materials, setMaterials] = useState([]);
 
   const isMobile = window.innerWidth < 768;
 
-  /* ⭐ Dummy Upcoming Classes */
-  const dummyClasses = [
-    {
-      id: 1,
-      title: "AI – Introduction to Machine Learning",
-      mentor: "Sanath",
-      date: "29 Nov 2025",
-      time: "10:00 AM",
-      materialUrl:
-        "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-    },
-    {
-      id: 2,
-      title: "VLSI – CMOS Design Basics",
-      mentor: "Pavan",
-      date: "29 Nov 2025",
-      time: "11:00 AM",
-      materialUrl:
-        "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-    },
-    {
-      id: 3,
-      title: "DBMS – SQL Joins & Queries",
-      mentor: "Rahul Kumar",
-      date: "30 Nov 2025",
-      time: "09:30 AM",
-      materialUrl:
-        "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-    },
-  ];
+  // ==========================================
+  // 1. DEFINE AUDIO FUNCTIONS FIRST
+  // ==========================================
 
-  /* Listen to slide updates */
-  useEffect(() => {
-    window.addEventListener("edu_push_present", (e) =>
-      setSlideIndex(e.detail.slideIndex)
-    );
-  }, []);
-
-  const sendMsg = () => {
-    if (!msg.trim()) return;
-
-    window.dispatchEvent(
-      new CustomEvent("edu_discussion", {
-        detail: { text: msg, by: "student" },
-      })
-    );
-
-    setMsg("");
-  };
-
-  /* -----------------------------------------------------
-            DOWNLOAD MATERIAL
-    ------------------------------------------------------ */
-
-  const downloadNow = async () => {
-    setShowDownloadPopup(false);
-
-    const url = activeClass.materialUrl;
-    const response = await fetch(url);
-    const blob = await response.blob();
-
-    const downloadUrl = URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = `${activeClass.title}-material.pdf`;
-    link.click();
-
-    alert("Material Downloaded Successfully!");
-  };
-
-  const downloadWhenOnline = () => {
-    setShowDownloadPopup(false);
-    alert("Download scheduled. It will start once network is available.");
-
-    window.addEventListener(
-      "online",
-      () => {
-        downloadNow();
-      },
-      { once: true }
-    );
-  };
-
-  const joinLiveSessionDetails = async () => {
+  const startMicrophone = async () => {
     try {
-      const response = await joinLiveSession();
-      SetLiveClasses(response.data.liveClasses);
-    } catch (error) {}
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      setIsMuted(false);
+      console.log("Microphone started");
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      alert("Could not access microphone. Please check permissions.");
+      setIsMuted(true);
+    }
   };
 
+  const stopMicrophone = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsMuted(true);
+  };
+
+  const toggleMute = () => {
+    if (isMuted) {
+      startMicrophone();
+    } else {
+      stopMicrophone();
+    }
+  };
+
+  // ==========================================
+  // 2. USE EFFECTS
+  // ==========================================
+
+  // --- Load Sessions on Mount ---
   useEffect(() => {
-    joinLiveSessionDetails();
+    // Defined INSIDE the effect to fix linter error
+    const fetchSessions = async () => {
+      try {
+        const { data } = await getStudentLiveSessions();
+        setSessions(data.sessions || []);
+      } catch (error) {
+        console.error("Failed to load sessions", error);
+      }
+    };
+
+    fetchSessions();
   }, []);
-  /* -----------------------------------------------------
-            MOBILE LIVE UI
-    ------------------------------------------------------ */
-  if (joined && isMobile) {
+
+  // --- Socket Connection ---
+  useEffect(() => {
+    if (joined && activeClass) {
+      // Initialize Socket
+      socketRef.current = io("http://localhost:8928/live-session", {
+        withCredentials: true
+      });
+
+      const socket = socketRef.current;
+
+      socket.on("connect", () => {
+        console.log("Student Connected to Socket");
+        socket.emit("join-session", {
+          sessionId: activeClass.sessionId,
+          userId: "STUDENT_ID_HERE", // Ideally from Auth Context
+          userName: "Student", // Ideally from Auth Context
+          role: "student"
+        });
+      });
+
+      // Listen for chat
+      socket.on("chat-message", (msg) => {
+        setChatMessages((prev) => [...prev, msg]);
+      });
+
+      // Listen for slide changes
+      socket.on("slide-change", (data) => {
+        setSlideIndex(data.slideIndex);
+      });
+
+      // Listen for new materials
+      socket.on("new-material", (material) => {
+        setMaterials(prev => [...prev, material]);
+        alert("New material uploaded by teacher!");
+      });
+
+      return () => {
+        if (socket) socket.disconnect();
+        stopMicrophone(); // Now safe to call because it's defined above
+      };
+    }
+  }, [joined, activeClass]);
+
+  // ==========================================
+  // 3. OTHER HANDLERS
+  // ==========================================
+
+  const handleJoinSession = async (session) => {
+    try {
+      // 1. Call API to verify join
+      await joinSessionAPI(session.sessionId);
+      
+      // 2. Fetch initial chat & materials
+      const [chatRes, matRes] = await Promise.all([
+        getSessionChat(session.sessionId),
+        getSessionMaterials(session.sessionId)
+      ]);
+
+      setChatMessages(chatRes.data.chat || []);
+      setMaterials(matRes.data.materials || []);
+      setActiveClass(session);
+      setJoined(true);
+
+    } catch (error) {
+      console.error("Join failed", error);
+      alert("Failed to join session. It might not be active yet.");
+    }
+  };
+
+  const sendMsg = async () => {
+    if (!msg.trim() || !activeClass) return;
+
+    try {
+      await sendChatMessage(activeClass.sessionId, { messageText: msg });
+      setMsg("");
+    } catch (error) {
+      console.error("Failed to send message", error);
+    }
+  };
+
+  const handleUnderstood = async () => {
+    try {
+      await markUnderstood(activeClass.sessionId);
+      const btn = document.getElementById("btn-understood");
+      if(btn) {
+        btn.classList.add("bg-green-700", "scale-105");
+        setTimeout(() => btn.classList.remove("bg-green-700", "scale-105"), 200);
+      }
+    } catch (error) {
+      console.error("Reaction failed", error);
+    }
+  };
+
+  const downloadMaterial = (url, filename) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.target = "_blank";
+    link.click();
+  };
+
+  // =======================================================
+  //                      RENDER
+  // =======================================================
+
+  if (!joined) {
     return (
-      <div className="fixed top-0 left-0 w-full h-full bg-black text-white flex flex-col">
-        {/* TOP */}
-        <div className="flex flex-col items-center py-4">
-          <span className="bg-red-600 px-4 py-2 rounded-lg text-sm font-bold mb-2">
-            LIVE
-          </span>
-          <span className="font-semibold text-lg">{activeClass?.title}</span>
-          <span className="text-gray-300 text-sm mt-1">
-            {activeClass?.date} • {activeClass?.time}
-          </span>
+      <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
+        <div className="w-full max-w-4xl">
+          <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">Live Classes</h1>
+          
+          {sessions.length === 0 ? (
+            <div className="text-center py-10 bg-white rounded-2xl shadow-sm">
+              <p className="text-gray-500">No active sessions found.</p>
+            </div>
+          ) : (
+            <div className="grid gap-6">
+              {sessions.map((cls) => (
+                <div key={cls.sessionId} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-6 hover:shadow-md transition">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${cls.isActive ? "bg-red-100 text-red-600 animate-pulse" : "bg-gray-100 text-gray-600"}`}>
+                        {cls.isActive ? "LIVE NOW" : "Scheduled"}
+                      </span>
+                      <span className="text-sm text-gray-500 flex items-center gap-1">
+                        <FiCalendar /> {new Date(cls.scheduledDate).toLocaleDateString()}
+                      </span>
+                      <span className="text-sm text-gray-500 flex items-center gap-1">
+                        <FiClock /> {cls.scheduledTime}
+                      </span>
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900">{cls.sessionTitle}</h2>
+                    <p className="text-gray-600 mt-1">{cls.course?.courseName || "General Course"}</p>
+                  </div>
+
+                  <button
+                    onClick={() => handleJoinSession(cls)}
+                    disabled={!cls.isActive}
+                    className={`px-8 py-3 rounded-xl font-bold text-white shadow-md transition ${
+                      cls.isActive 
+                        ? "bg-indigo-600 hover:bg-indigo-700 hover:scale-105" 
+                        : "bg-gray-300 cursor-not-allowed"
+                    }`}
+                  >
+                    {cls.isActive ? "Join Class" : "Wait to Start"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // --- LIVE CLASSROOM UI ---
+  return (
+    <div className={`fixed inset-0 bg-white flex flex-col ${isMobile ? "" : "md:flex-row"}`}>
+      
+      {/* 1. MAIN STAGE */}
+      <div className="flex-1 bg-gray-100 relative flex flex-col">
+        {/* Header */}
+        <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent text-white z-10 flex justify-between items-start">
+          <div>
+            <h2 className="font-bold text-lg shadow-black drop-shadow-md">{activeClass?.sessionTitle}</h2>
+            <p className="text-xs opacity-90">{activeClass?.course?.courseName}</p>
+          </div>
+          <button 
+            onClick={() => { setJoined(false); stopMicrophone(); }}
+            className="bg-red-600/90 hover:bg-red-600 px-4 py-1.5 rounded-lg text-sm font-semibold backdrop-blur-md"
+          >
+            Leave
+          </button>
         </div>
 
-        {/* SLIDE */}
-        <div className="flex-1 flex items-center justify-center">
-          {slideIndex !== null ? (
-            <h1 className="text-4xl font-bold opacity-80">
-              Slide {slideIndex + 1}
-            </h1>
+        {/* Slide Display */}
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center text-gray-400">
+            <h1 className="text-6xl font-bold opacity-20">Slide {slideIndex + 1}</h1>
+            <p className="mt-4 text-sm">Teacher's Screen</p>
+          </div>
+        </div>
+
+        {/* Bottom Controls (Mobile Only) */}
+        {isMobile && (
+          <div className="bg-white p-3 border-t flex justify-around items-center">
+             <button onClick={toggleMute} className={`p-3 rounded-full ${!isMuted ? "bg-indigo-100 text-indigo-600" : "bg-gray-100"}`}>
+               {isMuted ? <FiMicOff /> : <FiMic />}
+             </button>
+             <button id="btn-understood" onClick={handleUnderstood} className="p-3 rounded-full bg-green-100 text-green-700 transition-transform">
+               <FiThumbsUp />
+             </button>
+             <button onClick={() => setShowDownloadPopup(true)} className="p-3 rounded-full bg-blue-100 text-blue-600">
+               <FiDownload />
+             </button>
+          </div>
+        )}
+      </div>
+
+      {/* 2. SIDEBAR (Chat & Controls) - Desktop/Tablet */}
+      <div className={`bg-white border-l w-full md:w-96 flex flex-col ${isMobile ? "h-[40vh]" : "h-full"}`}>
+        
+        {/* Tabs / Header */}
+        <div className="p-4 border-b bg-gray-50 flex items-center gap-2 font-semibold text-gray-700">
+          <FiMessageSquare /> Live Chat
+        </div>
+
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {chatMessages.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm mt-10">Say hello to the class! 👋</p>
           ) : (
-            <p className="opacity-50">Waiting…</p>
+            chatMessages.map((m, i) => (
+              <div key={i} className={`flex flex-col ${m.role === 'student' && m.userId === 'STUDENT_ID_HERE' ? 'items-end' : 'items-start'}`}>
+                <div className={`max-w-[85%] rounded-xl p-3 text-sm ${
+                  m.role === 'teacher' 
+                    ? "bg-indigo-50 text-indigo-900 border border-indigo-100" 
+                    : "bg-gray-100 text-gray-800"
+                }`}>
+                  <span className="text-xs font-bold block mb-1 opacity-70">{m.userName}</span>
+                  {m.message}
+                </div>
+              </div>
+            ))
           )}
         </div>
 
-        {/* DOWNLOAD BUTTON */}
-        <div className="p-3 text-center">
-          <button
-            onClick={() => setShowDownloadPopup(true)}
-            className="bg-indigo-600 px-6 py-3 rounded-xl text-white font-semibold flex items-center gap-2 mx-auto"
-          >
-            <FiDownload /> Download Material
-          </button>
-        </div>
+        {/* Desktop Controls Area */}
+        {!isMobile && (
+          <div className="p-4 bg-gray-50 border-t space-y-4">
+            <div className="flex justify-between gap-2">
+              <button 
+                onClick={toggleMute}
+                className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition ${
+                  !isMuted ? "bg-red-100 text-red-600" : "bg-white border hover:bg-gray-50"
+                }`}
+              >
+                {isMuted ? <><FiMicOff /> Unmute</> : <><FiMic /> Mute</>}
+              </button>
+              
+              <button 
+                id="btn-understood-d"
+                onClick={handleUnderstood}
+                className="flex-1 py-2 rounded-lg bg-green-100 text-green-700 font-medium hover:bg-green-200 transition flex items-center justify-center gap-2"
+              >
+                <FiThumbsUp /> Understood
+              </button>
+            </div>
 
-        {/* CONTROLS */}
-        <div className="flex justify-center gap-6 pb-3">
-          <button
-            onClick={() => setMicOn(!micOn)}
-            className="bg-gray-800 p-4 rounded-full"
-          >
-            {micOn ? <FiVolume2 /> : <FiVolumeX />}
-          </button>
+            <button 
+              onClick={() => setShowDownloadPopup(true)}
+              className="w-full py-2 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <FiDownload /> Class Materials ({materials.length})
+            </button>
+          </div>
+        )}
 
-          <button
-            onClick={() =>
-              window.dispatchEvent(
-                new CustomEvent("edu_reaction", {
-                  detail: { type: "understood" },
-                })
-              )
-            }
-            className="bg-gray-800 p-4 rounded-full"
-          >
-            <FiThumbsUp />
-          </button>
-
-          <button
-            onClick={() => {
-              const q = prompt("Your Doubt?");
-              if (q)
-                window.dispatchEvent(
-                  new CustomEvent("edu_reaction", {
-                    detail: { type: "doubt", message: q },
-                  })
-                );
-            }}
-            className="bg-gray-800 p-4 rounded-full"
-          >
-            <FiHelpCircle />
-          </button>
-
-          <button
-            className="bg-red-600 p-4 rounded-full"
-            onClick={() => setJoined(false)}
-          >
-            Exit
-          </button>
-        </div>
-
-        {/* INPUT */}
-        <div className="flex gap-2 p-3 border-t border-gray-700">
+        {/* Chat Input */}
+        <div className="p-3 border-t flex gap-2">
           <input
             value={msg}
             onChange={(e) => setMsg(e.target.value)}
-            className="flex-1 bg-gray-800 rounded-lg px-3 py-2 outline-none text-sm"
-            placeholder="Ask me something..."
+            onKeyPress={(e) => e.key === 'Enter' && sendMsg()}
+            placeholder="Type a doubt..."
+            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          <button
+          <button 
             onClick={sendMsg}
-            className="bg-indigo-600 px-5 rounded-lg font-semibold"
+            disabled={!msg.trim()}
+            className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
           >
             <FiSend />
           </button>
         </div>
-
-        {/* POPUP */}
-        {showDownloadPopup && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center">
-            <div className="bg-white text-black rounded-xl p-6 w-80 text-center space-y-4">
-              <h2 className="text-xl font-bold">Download Material</h2>
-
-              <button
-                onClick={downloadNow}
-                className="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold"
-              >
-                Download Now
-              </button>
-
-              <button
-                onClick={downloadWhenOnline}
-                className="w-full bg-gray-200 py-2 rounded-lg font-semibold"
-              >
-                Download When Network Available
-              </button>
-
-              <button
-                onClick={() => setShowDownloadPopup(false)}
-                className="text-red-600 font-semibold mt-2"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </div>
-    );
-  }
 
-  /* -----------------------------------------------------
-            DESKTOP LIVE UI
-    ------------------------------------------------------ */
-  if (joined && !isMobile) {
-    return (
-      <div className="min-h-screen w-full bg-white flex flex-col">
-        {/* TOP BAR */}
-        <div className="flex flex-col items-center justify-center py-4 bg-white border-b">
-          <span className="bg-red-600 px-4 py-1 rounded-lg text-sm font-bold text-white mb-1">
-            LIVE
-          </span>
-          <span className="font-semibold text-2xl text-gray-800">
-            {activeClass?.title}
-          </span>
-
-          {/* TIMING */}
-          <span className="text-gray-500 mt-1">
-            {activeClass?.date} • {activeClass?.time}
-          </span>
-        </div>
-
-        {/* MAIN */}
-        <div className="flex flex-col items-center gap-10 px-8 py-10">
-          {/* Slide */}
-          <div className="w-full max-w-4xl h-[380px] rounded-xl bg-gray-100 border border-gray-300 flex items-center justify-center shadow-md">
-            {slideIndex !== null ? (
-              <h1 className="text-5xl font-bold text-gray-800 opacity-80">
-                Slide {slideIndex + 1}
-              </h1>
+      {/* DOWNLOAD MODAL */}
+      {showDownloadPopup && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl animate-in zoom-in-95">
+            <h3 className="text-lg font-bold mb-4">Class Materials</h3>
+            
+            {materials.length === 0 ? (
+              <p className="text-gray-500 text-sm mb-6">No materials uploaded by teacher yet.</p>
             ) : (
-              <span className="opacity-40 text-gray-500">Waiting…</span>
+              <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
+                {materials.map((mat, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm truncate max-w-[70%]">{mat.fileName || `File ${idx + 1}`}</span>
+                    <button 
+                      onClick={() => downloadMaterial(mat.url, mat.fileName)}
+                      className="text-blue-600 hover:underline text-xs font-semibold"
+                    >
+                      Download
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
-          </div>
 
-          {/* Download Button */}
-          <button
-            onClick={() => setShowDownloadPopup(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-7 py-3 rounded-xl font-semibold flex items-center gap-2 shadow-md"
-          >
-            <FiDownload size={20} /> Download Material
-          </button>
-
-          {/* Controls */}
-          <div className="flex gap-5">
-            <button
-              onClick={() => setMicOn(!micOn)}
-              className="p-4 rounded-full border bg-gray-100 hover:bg-gray-200 shadow"
-            >
-              {micOn ? <FiVolume2 size={24} /> : <FiVolumeX size={24} />}
-            </button>
-
-            <button
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent("edu_reaction", {
-                    detail: { type: "understood" },
-                  })
-                )
-              }
-              className="px-6 py-3 rounded-xl border bg-gray-100 hover:bg-gray-200 font-semibold shadow"
-            >
-              👍 Understood
-            </button>
-          </div>
-
-          {/* Input */}
-          <div className="flex gap-2 w-full max-w-4xl">
-            <input
-              value={msg}
-              onChange={(e) => setMsg(e.target.value)}
-              className="flex-1 border rounded-lg px-4 py-2 outline-none text-gray-700 bg-white shadow"
-              placeholder="Ask me something..."
-            />
-
-            <button
-              onClick={sendMsg}
-              className="bg-indigo-600 hover:bg-indigo-700 px-6 rounded-lg font-semibold text-white shadow-lg"
-            >
-              <FiSend />
-            </button>
-          </div>
-        </div>
-
-        {/* POPUP */}
-        {showDownloadPopup && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center">
-            <div className="bg-white text-black rounded-xl p-6 w-96 text-center space-y-4">
-              <h2 className="text-2xl font-bold">Download Material</h2>
-
-              <button
-                onClick={downloadNow}
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold"
-              >
-                Download Now
-              </button>
-
-              <button
-                onClick={downloadWhenOnline}
-                className="w-full bg-gray-200 py-3 rounded-lg font-semibold"
-              >
-                Download When Network Available
-              </button>
-
-              <button
-                onClick={() => setShowDownloadPopup(false)}
-                className="text-red-600 font-semibold mt-2"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  /* -----------------------------------------------------
-        BEFORE JOIN — CLEAN MODERN UI + TIMINGS
-    ------------------------------------------------------ */
-  return (
-    <div className="min-h-screen bg-white p-4 flex flex-col items-center">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">
-        Live Classes
-      </h1>
-
-      <div className="hidden md:flex flex-col gap-6 w-full max-w-4xl">
-        {dummyClasses.map((cls) => {
-          const classTimestamp = new Date(`${cls.date} ${cls.time}`).getTime();
-          const materialAvailable =
-            Date.now() >= classTimestamp - 24 * 60 * 60 * 1000;
-
-          return (
-            <div
-              key={cls.id}
-              className="flex items-center justify-between bg-[#f4f4f8] rounded-2xl p-6 shadow border border-gray-200"
-            >
-              {/* LEFT TEXT */}
-              <div className="flex flex-col">
-                <p className="text-2xl font-bold text-gray-900">{cls.title}</p>
-                <p className="text-gray-600 text-lg">{cls.mentor}</p>
-
-                {/* TIMINGS */}
-                <p className="text-gray-500 text-sm mt-1">
-                  🕒 {cls.date} • {cls.time}
-                </p>
-              </div>
-
-              {/* RIGHT BUTTONS */}
-              <div className="flex items-center gap-4">
-                {/* Download Material */}
-                {materialAvailable && (
-                  <button
-                    onClick={() => {
-                      setActiveClass(cls);
-                      setShowDownloadPopup(true);
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 shadow-md"
-                  >
-                    <FiDownload /> Download Material
-                  </button>
-                )}
-
-                {/* Join Session */}
-                <button
-                  onClick={() => {
-                    setActiveClass(cls);
-                    setJoined(true);
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold shadow-md"
-                >
-                  Join Session
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Popup for Before Join */}
-      {showDownloadPopup && activeClass && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center">
-          <div className="bg-white text-black rounded-xl p-6 w-96 text-center space-y-4">
-            <h2 className="text-2xl font-bold">Download Material</h2>
-
-            <button
-              onClick={downloadNow}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold"
-            >
-              Download Now
-            </button>
-
-            <button
-              onClick={downloadWhenOnline}
-              className="w-full bg-gray-200 py-3 rounded-lg font-semibold"
-            >
-              Download When Network Available
-            </button>
-
-            <button
+            <button 
               onClick={() => setShowDownloadPopup(false)}
-              className="text-red-600 font-semibold mt-2"
+              className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700"
             >
-              Cancel
+              Close
             </button>
           </div>
         </div>
       )}
+
     </div>
   );
 }

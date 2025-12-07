@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FiUpload,
   FiPlus,
@@ -31,6 +31,7 @@ import LiveClassRoom from "./components/LiveClassRoom";
 import NavButton from "./components/ui/NavButton";
 import { logoutUser } from "@/api/auth";
 import { useNavigate } from "react-router-dom";
+import { teacherDashbaord } from "@/api/teacher";
 
 export default function TeacherDashboard() {
   // Load saved org/teacher name from localStorage
@@ -39,6 +40,16 @@ export default function TeacherDashboard() {
     localStorage.getItem("organizationName") || "My Organization";
 
   const teacherName = localStorage.getItem("teacherName") || "Demo Teacher";
+  const [teacherData, setTeacherData] = useState([]);
+    useEffect(() => {
+      const teacherData = async () => {
+        try {
+          const response = await teacherDashbaord();
+          setTeacherData(response.data);
+        } catch (error) {}
+      };
+      teacherData();
+    }, []);
 
   const user = {
     name: teacherName,
@@ -98,6 +109,8 @@ export default function TeacherDashboard() {
     setMobileMenuOpen(false);
   };
 
+   
+
   return (
     <>
       <style>{`
@@ -133,7 +146,7 @@ export default function TeacherDashboard() {
             {/* ORG NAME (Mobile) */}
             <div className="p-4 flex items-center justify-between h-20">
               <div>
-                <div className="text-lg font-extrabold">{organizationName}</div>
+                <div className="text-lg font-extrabold">{teacherData?.orgName}</div>
                 <div className="text-xs text-white/80">Expert Console</div>
               </div>
 
@@ -235,7 +248,7 @@ export default function TeacherDashboard() {
             {sidebarOpen && (
               <div>
                 <div className="text-lg font-extrabold text-white">
-                  {organizationName}
+                  {teacherData?.orgName}
                 </div>
                 <div className="text-xs text-white/70">Experts Console</div>
               </div>
@@ -352,7 +365,7 @@ export default function TeacherDashboard() {
             {/* TEACHER NAME TOP RIGHT */}
             <div className="hidden md:flex items-center gap-4">
               <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl shadow font-semibold">
-                {teacherName}
+            {teacherData?.teacherName}
               </div>
             </div>
           </header>
