@@ -18,7 +18,7 @@ const InputField = ({
     type === "password" && showPassword ? "text" : type || "text";
 
   const commonClasses =
-    "w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 dark:bg-gray-800/80 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 transition text-sm";
+    "w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 bg-white border-gray-300 text-black placeholder-gray-500 transition text-sm";
 
   const errorClasses = error
     ? "border-red-500 focus:ring-red-500 focus:border-red-500"
@@ -29,7 +29,7 @@ const InputField = ({
       {label && (
         <label
           htmlFor={name}
-          className="text-xs font-medium text-gray-700 dark:text-gray-300 block"
+          className="text-xs font-medium text-black block"
         >
           {label}
         </label>
@@ -62,7 +62,7 @@ const InputField = ({
           <button
             type="button"
             onClick={() => setShowPassword((p) => !p)}
-            className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-200 text-xs"
+            className="absolute inset-y-0 right-3 flex items-center text-black hover:text-gray-700 text-xs"
           >
             {showPassword ? <FiEyeOff /> : <FiEye />}
           </button>
@@ -70,7 +70,7 @@ const InputField = ({
       </div>
 
       {error && (
-        <p className="text-[11px] text-red-400 flex items-center gap-1">
+        <p className="text-[11px] text-red-600 flex items-center gap-1">
           <FiAlertCircle className="w-3 h-3" /> {error}
         </p>
       )}

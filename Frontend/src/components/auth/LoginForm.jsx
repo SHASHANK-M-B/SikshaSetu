@@ -69,7 +69,6 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
           password: formData.password,
         });
       }
-      console.log(response, "login response");
 
       if (response.status === 200) {
         if (response.data.user.role === "organization")
@@ -96,10 +95,9 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
       type="button"
       onClick={() => setRole(id)}
       className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs border transition
-        ${
-          role === id
-            ? "bg-cyan-500/20 border-cyan-400 text-cyan-200"
-            : "bg-black/30 border-gray-700 text-gray-400 hover:bg-black/50"
+        ${role === id
+          ? "bg-emerald-100 border-emerald-400 text-black"
+          : "bg-white border-gray-300 text-black hover:bg-gray-100"
         }`}
     >
       {id === "organization" && <FiShield />}
@@ -112,7 +110,7 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
   return (
     <form onSubmit={submit} className="space-y-4 mt-4 text-xs md:text-sm">
       <div className="flex flex-col gap-2">
-        <label className="text-[11px] text-gray-300 font-semibold">
+        <label className="text-[11px] text-black font-semibold">
           Choose Your Role
         </label>
         <div className="flex gap-2 flex-wrap">
@@ -121,7 +119,7 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
           <RoleCard id="student" label="Student" />
         </div>
         {errors.role && (
-          <span className="text-[10px] text-red-400">{errors.role}</span>
+          <span className="text-[10px] text-red-600">{errors.role}</span>
         )}
       </div>
 
@@ -158,20 +156,9 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
       />
 
       <div className="flex items-center justify-end text-[11px]">
-        {/* <label className="flex items-center gap-2 text-gray-400">
-          <input
-            type="checkbox"
-            name="remember"
-            checked={formData.remember}
-            onChange={handleChange}
-            className="rounded border-gray-500"
-          />
-          Remember me
-        </label> */}
-
         <button
           type="button"
-          className="text-cyan-400 hover:text-cyan-300 font-medium"
+          className="text-black hover:text-gray-700 font-medium"
           onClick={() => switchMode("forgot")}
         >
           Forgot password?
@@ -181,36 +168,37 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
       <button
         type="submit"
         disabled={loading}
-        className="w-full p-3 bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-sm font-semibold flex items-center justify-center gap-2 transition"
+        className="w-full p-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-sm font-semibold flex items-center justify-center gap-2 transition"
       >
         <FiLock className="w-4 h-4" />
         {loading ? "Logging in..." : "Log In"}
       </button>
 
-      <div className="flex items-center gap-2 text-[11px] text-gray-500">
-        <span className="h-px bg-gray-700 flex-1" />
+      <div className="flex items-center gap-2 text-[11px] text-black">
+        <span className="h-px bg-gray-300 flex-1" />
         <span>or</span>
-        <span className="h-px bg-gray-700 flex-1" />
+        <span className="h-px bg-gray-300 flex-1" />
       </div>
 
       <button
         type="button"
         onClick={() => switchMode("otp")}
-        className="w-full p-3 border border-cyan-500/60 hover:bg-cyan-500/10 text-cyan-200 rounded-lg text-xs font-medium flex items-center justify-center gap-2"
+        className="w-full p-3 border border-emerald-500 hover:bg-emerald-50 text-black rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition"
       >
         <FiKey className="w-4 h-4" />
         Login with One-Time OTP
       </button>
 
-      <p className="text-center text-[11px] text-gray-400 mt-2">
+      <p className="text-center text-[11px] text-black mt-2">
         Don't have an account?
         <button
           type="button"
           onClick={() => onToggleForm("register")}
-          className="text-cyan-400 hover:text-cyan-300 font-semibold ml-1"
+          className="text-blue-600 hover:text-blue-700 font-semibold ml-1"
         >
           Register
         </button>
+
       </p>
     </form>
   );

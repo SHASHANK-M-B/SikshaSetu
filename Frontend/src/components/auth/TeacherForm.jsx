@@ -14,6 +14,7 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingOrgs, setLoadingOrgs] = useState(true);
+
   const subjects = [
     { subject: "AI" },
     { subject: "VLSI" },
@@ -90,8 +91,9 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
         error={errors.name}
       />
 
+      {/* Organization Select */}
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] text-gray-300 font-semibold">
+        <label className="text-[11px] text-black font-semibold">
           Organization
         </label>
 
@@ -100,29 +102,29 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
           value={formData.orgCode}
           onChange={handleChange}
           disabled={loadingOrgs}
-          className={`w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 dark:bg-gray-800/80 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 transition text-sm`}
+          className="w-full p-3 pr-10 border rounded-lg
+          focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400
+          bg-white border-gray-300 text-black transition text-sm"
         >
-          <option className="bg-[#0d0d0e] text-gray-200" value="">
+          <option value="">
             {loadingOrgs ? "Loading..." : "-- Select Organization --"}
           </option>
+
           {organizations.map((org) => (
-            <option
-              key={org.orgCode}
-              value={org.orgCode}
-              className="bg-[#0d0d0e] text-gray-200"
-            >
+            <option key={org.orgCode} value={org.orgCode}>
               {org.orgName}
             </option>
           ))}
         </select>
 
         {errors.orgCode && (
-          <span className="text-[10px] text-red-400">{errors.orgCode}</span>
+          <span className="text-[10px] text-red-600">{errors.orgCode}</span>
         )}
       </div>
 
+      {/* Subject Select */}
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] text-gray-300 font-semibold">
+        <label className="text-[11px] text-black font-semibold">
           Subjects
         </label>
 
@@ -130,26 +132,21 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
           name="subject"
           value={formData.subject}
           onChange={handleChange}
-          className={`w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 dark:bg-gray-800/80 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 transition text-sm
-    `}
+          className="w-full p-3 pr-10 border rounded-lg
+          focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400
+          bg-white border-gray-300 text-black transition text-sm"
         >
-          <option className="bg-[#0d0d0e] text-gray-200" value="">
-            -- Select Subject --
-          </option>
+          <option value="">-- Select Subject --</option>
 
           {subjects.map((sub) => (
-            <option
-              key={sub.subject}
-              value={sub.subject}
-              className="bg-[#0d0d0e] text-gray-200"
-            >
+            <option key={sub.subject} value={sub.subject}>
               {sub.subject}
             </option>
           ))}
         </select>
 
         {errors.subject && (
-          <span className="text-[10px] text-red-400">{errors.subject}</span>
+          <span className="text-[10px] text-red-600">{errors.subject}</span>
         )}
       </div>
 
@@ -166,7 +163,10 @@ const TeacherForm = ({ onRegisterSuccess, showToast }) => {
       <button
         type="submit"
         disabled={loading || loadingOrgs}
-        className="w-full p-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-xs font-semibold flex items-center justify-center gap-2 mt-2 transition"
+        className="w-full p-3 bg-emerald-600 hover:bg-emerald-500
+        disabled:bg-gray-400 disabled:cursor-not-allowed
+        text-white rounded-lg shadow-lg text-xs font-semibold
+        flex items-center justify-center gap-2 mt-2 transition"
       >
         {loading ? "Submitting..." : "Request For Approval"}
       </button>

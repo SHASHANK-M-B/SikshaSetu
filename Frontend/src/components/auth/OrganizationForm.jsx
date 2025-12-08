@@ -72,6 +72,7 @@ const OrganizationForm = ({ onRegisterSuccess, showToast }) => {
         <InputField
           name="email"
           label="Email Address"
+          type="email"
           value={formData.email}
           onChange={handleChange}
           error={errors.email}
@@ -99,6 +100,7 @@ const OrganizationForm = ({ onRegisterSuccess, showToast }) => {
           error={errors.city}
         />
       </div>
+
       <div className="px-0.5">
         <InputField
           isTextArea
@@ -109,10 +111,11 @@ const OrganizationForm = ({ onRegisterSuccess, showToast }) => {
           error={errors.address}
         />
       </div>
+
       <button
         type="submit"
         disabled={loading}
-        className="w-full p-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-white text-[10px] transition"
+        className="w-full p-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-400 disabled:cursor-not-allowed rounded text-white text-[10px] transition"
       >
         {loading ? "Submitting..." : "Request For Approval"}
       </button>
