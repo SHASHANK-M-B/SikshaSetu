@@ -276,7 +276,7 @@ export default function Downloads() {
                 <tr key={item.id} className="border-b last:border-0">
                   <td className="p-3">{item.title}</td>
                   <td className="p-3">{item.course}</td>
-                  <td className="p-3">{FORMAT_MAP[item.category]}</td>
+                  <td className="p-3">{item.resourceType}</td>
 
                   {/* VIEW button */}
                   <td className="p-3">
