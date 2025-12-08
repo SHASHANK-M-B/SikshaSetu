@@ -1,17 +1,19 @@
+// api/student.js
+
 import client from "./client";
 
 // Dashboard & Courses
 export const getStudentDashboard = () => client.get("/api/student/dashboard");
 export const getAllCourses = () => client.get("/api/student/courses");
 
-// Live Sessions (FIXED URL)
+// Live Sessions
 export const getStudentLiveSessions = () =>
   client.get("/api/student/live-session/available");
-
 export const getLiveSessionDetails = (id) =>
   client.get(`/api/student/live-session/${id}`);
-export const joinSessionAPI = (id) =>
-  client.post(`/api/student/live-session/${id}/join`); // not new
+
+// Note: Removed joinSessionAPI as it is handled via Socket.IO
+
 export const getSessionChat = (id) =>
   client.get(`/api/student/live-session/${id}/chat`);
 export const sendChatMessage = (id, data) =>
@@ -30,3 +32,9 @@ export const lessionBundles = () => client.get("/api/student/bundles");
 // Analytics
 export const getStudentAnalytics = (params) =>
   client.get("/api/student/analytics", { params });
+
+// quizzes
+export const listOfQuizes = () => client.get("/api/student/quizzes");
+export const getQuizQuestion = (id) => client.get(`/api/student/quiz/${id}`);
+export const submitQuizResponses = (id, data) =>
+  client.get(`/api/student/quiz/${id}/attempt`, data);

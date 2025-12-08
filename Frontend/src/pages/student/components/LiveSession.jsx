@@ -1,3 +1,4 @@
+//pages/student/components/LiveSession.jsx
 import React, { useEffect, useState, useRef } from "react";
 import {
   FiThumbsUp,
@@ -16,10 +17,8 @@ import {
 import { io } from "socket.io-client";
 import { 
   getStudentLiveSessions, 
-  joinSessionAPI, 
   getSessionChat, 
   sendChatMessage, 
-  markUnderstood,
   getSessionMaterials
 } from "@/api/student";
 
@@ -29,7 +28,7 @@ export default function LiveSession() {
   const [activeClass, setActiveClass] = useState(null);
   
   // Real-time State
-  const [slideIndex, setSlideIndex] = useState(0); 
+  const [currentSlideImage, setCurrentSlideImage] = useState(null); // Image Data URL
   const [chatMessages, setChatMessages] = useState([]);
   const [msg, setMsg] = useState("");
   
@@ -43,10 +42,7 @@ export default function LiveSession() {
 
   const isMobile = window.innerWidth < 768;
 
-  // ==========================================
-  // 1. DEFINE AUDIO FUNCTIONS FIRST
-  // ==========================================
-
+  // --- AUDIO ---
   const startMicrophone = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -76,13 +72,8 @@ export default function LiveSession() {
     }
   };
 
-  // ==========================================
-  // 2. USE EFFECTS
-  // ==========================================
-
-  // --- Load Sessions on Mount ---
+  // --- INITIAL LOAD ---
   useEffect(() => {
-    // Defined INSIDE the effect to fix linter error
     const fetchSessions = async () => {
       try {
         const { data } = await getStudentLiveSessions();
@@ -95,11 +86,11 @@ export default function LiveSession() {
     fetchSessions();
   }, []);
 
-  // --- Socket Connection ---
+  // --- SOCKET ---
   useEffect(() => {
     if (joined && activeClass) {
-      // Initialize Socket
-      socketRef.current = io("http://localhost:8928/live-session", {
+      // socketRef.current = io("http://localhost:8928/live-session", {
+      socketRef.current = io("https://sikshasetu-backend.onrender.com/live-session", {
         withCredentials: true
       });
 
@@ -109,23 +100,23 @@ export default function LiveSession() {
         console.log("Student Connected to Socket");
         socket.emit("join-session", {
           sessionId: activeClass.sessionId,
-          userId: "STUDENT_ID_HERE", // Ideally from Auth Context
-          userName: "Student", // Ideally from Auth Context
+          userId: "STUDENT_ID_HERE", // Replace with actual context user ID if available
+          userName: "Student Name",
           role: "student"
         });
       });
 
-      // Listen for chat
       socket.on("chat-message", (msg) => {
         setChatMessages((prev) => [...prev, msg]);
       });
 
-      // Listen for slide changes
+      // LISTEN FOR SLIDE CHANGES
       socket.on("slide-change", (data) => {
-        setSlideIndex(data.slideIndex);
+        if(data.slideImage) {
+            setCurrentSlideImage(data.slideImage);
+        }
       });
 
-      // Listen for new materials
       socket.on("new-material", (material) => {
         setMaterials(prev => [...prev, material]);
         alert("New material uploaded by teacher!");
@@ -133,21 +124,13 @@ export default function LiveSession() {
 
       return () => {
         if (socket) socket.disconnect();
-        stopMicrophone(); // Now safe to call because it's defined above
+        stopMicrophone();
       };
     }
   }, [joined, activeClass]);
 
-  // ==========================================
-  // 3. OTHER HANDLERS
-  // ==========================================
-
   const handleJoinSession = async (session) => {
     try {
-      // 1. Call API to verify join
-      await joinSessionAPI(session.sessionId);
-      
-      // 2. Fetch initial chat & materials
       const [chatRes, matRes] = await Promise.all([
         getSessionChat(session.sessionId),
         getSessionMaterials(session.sessionId)
@@ -160,13 +143,12 @@ export default function LiveSession() {
 
     } catch (error) {
       console.error("Join failed", error);
-      alert("Failed to join session. It might not be active yet.");
+      alert("Failed to load session details.");
     }
   };
 
   const sendMsg = async () => {
     if (!msg.trim() || !activeClass) return;
-
     try {
       await sendChatMessage(activeClass.sessionId, { messageText: msg });
       setMsg("");
@@ -175,16 +157,17 @@ export default function LiveSession() {
     }
   };
 
-  const handleUnderstood = async () => {
-    try {
-      await markUnderstood(activeClass.sessionId);
-      const btn = document.getElementById("btn-understood");
-      if(btn) {
-        btn.classList.add("bg-green-700", "scale-105");
-        setTimeout(() => btn.classList.remove("bg-green-700", "scale-105"), 200);
-      }
-    } catch (error) {
-      console.error("Reaction failed", error);
+  const handleUnderstood = () => {
+    // Send via socket directly
+    if(socketRef.current && activeClass) {
+        socketRef.current.emit("understood", { sessionId: activeClass.sessionId });
+        
+        // Visual feedback
+        const btn = document.getElementById("btn-understood");
+        if(btn) {
+            btn.classList.add("bg-green-700", "scale-105");
+            setTimeout(() => btn.classList.remove("bg-green-700", "scale-105"), 200);
+        }
     }
   };
 
@@ -195,10 +178,6 @@ export default function LiveSession() {
     link.target = "_blank";
     link.click();
   };
-
-  // =======================================================
-  //                      RENDER
-  // =======================================================
 
   if (!joined) {
     return (
@@ -250,13 +229,11 @@ export default function LiveSession() {
     );
   }
 
-  // --- LIVE CLASSROOM UI ---
   return (
     <div className={`fixed inset-0 bg-white flex flex-col ${isMobile ? "" : "md:flex-row"}`}>
       
       {/* 1. MAIN STAGE */}
       <div className="flex-1 bg-gray-100 relative flex flex-col">
-        {/* Header */}
         <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent text-white z-10 flex justify-between items-start">
           <div>
             <h2 className="font-bold text-lg shadow-black drop-shadow-md">{activeClass?.sessionTitle}</h2>
@@ -270,15 +247,17 @@ export default function LiveSession() {
           </button>
         </div>
 
-        {/* Slide Display */}
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="text-center text-gray-400">
-            <h1 className="text-6xl font-bold opacity-20">Slide {slideIndex + 1}</h1>
-            <p className="mt-4 text-sm">Teacher's Screen</p>
-          </div>
+        <div className="flex-1 flex items-center justify-center p-4 bg-black/90">
+          {currentSlideImage ? (
+             <img src={currentSlideImage} className="max-w-full max-h-full object-contain" alt="Live Slide" />
+          ) : (
+             <div className="text-center text-gray-400">
+               <h1 className="text-xl font-bold opacity-50">Waiting for teacher's slides...</h1>
+             </div>
+          )}
         </div>
 
-        {/* Bottom Controls (Mobile Only) */}
+        {/* Mobile Bottom Controls */}
         {isMobile && (
           <div className="bg-white p-3 border-t flex justify-around items-center">
              <button onClick={toggleMute} className={`p-3 rounded-full ${!isMuted ? "bg-indigo-100 text-indigo-600" : "bg-gray-100"}`}>
@@ -294,15 +273,13 @@ export default function LiveSession() {
         )}
       </div>
 
-      {/* 2. SIDEBAR (Chat & Controls) - Desktop/Tablet */}
+      {/* 2. SIDEBAR */}
       <div className={`bg-white border-l w-full md:w-96 flex flex-col ${isMobile ? "h-[40vh]" : "h-full"}`}>
         
-        {/* Tabs / Header */}
         <div className="p-4 border-b bg-gray-50 flex items-center gap-2 font-semibold text-gray-700">
           <FiMessageSquare /> Live Chat
         </div>
 
-        {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {chatMessages.length === 0 ? (
             <p className="text-center text-gray-400 text-sm mt-10">Say hello to the class! 👋</p>
@@ -322,7 +299,6 @@ export default function LiveSession() {
           )}
         </div>
 
-        {/* Desktop Controls Area */}
         {!isMobile && (
           <div className="p-4 bg-gray-50 border-t space-y-4">
             <div className="flex justify-between gap-2">
@@ -353,7 +329,6 @@ export default function LiveSession() {
           </div>
         )}
 
-        {/* Chat Input */}
         <div className="p-3 border-t flex gap-2">
           <input
             value={msg}
@@ -372,12 +347,10 @@ export default function LiveSession() {
         </div>
       </div>
 
-      {/* DOWNLOAD MODAL */}
       {showDownloadPopup && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl animate-in zoom-in-95">
             <h3 className="text-lg font-bold mb-4">Class Materials</h3>
-            
             {materials.length === 0 ? (
               <p className="text-gray-500 text-sm mb-6">No materials uploaded by teacher yet.</p>
             ) : (
@@ -395,7 +368,6 @@ export default function LiveSession() {
                 ))}
               </div>
             )}
-
             <button 
               onClick={() => setShowDownloadPopup(false)}
               className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700"

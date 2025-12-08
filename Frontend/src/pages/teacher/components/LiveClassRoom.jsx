@@ -1,3 +1,5 @@
+// LiveClassRoom.jsx
+
 import React, { useEffect, useState, useRef } from "react";
 import {
   FiChevronLeft,
@@ -8,14 +10,13 @@ import {
   FiPlay,
   FiFileText,
   FiCheckCircle,
-  FiPaperclip,
   FiThumbsUp,
   FiCalendar,
   FiClock,
   FiArrowLeft,
   FiMessageSquare,
-  FiSend, // Added for chat send icon
-  FiMicOff // Added for mute icon
+  FiSend,
+  FiMicOff
 } from "react-icons/fi";
 import { io } from "socket.io-client";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
@@ -45,13 +46,12 @@ export default function LiveClassRoom() {
 
   // Socket & Media Refs
   const socketRef = useRef(null);
-  const mediaStreamRef = useRef(null); // Ref to hold the actual microphone stream
+  const mediaStreamRef = useRef(null);
 
   // Schedule Form
   const [formData, setFormData] = useState({
     sessionTitle: "",
     shortDescription: "",
-    courseId: "",
     sessionHeading: "",
     date: "",
     time: "",
@@ -60,14 +60,14 @@ export default function LiveClassRoom() {
   // Presenter State
   const [slidesDeck, setSlidesDeck] = useState([]);
   const [slideIndex, setSlideIndex] = useState(0);
-  const [isLive, setIsLive] = useState(false); // Session is active
-  const [isMuted, setIsMuted] = useState(true); // Audio state
+  const [isLive, setIsLive] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [timer, setTimer] = useState(0);
   
   // Real-time Data
   const [reactionCounts, setReactionCounts] = useState({ understood: 0 });
   const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState(""); // Teacher chat input
+  const [chatInput, setChatInput] = useState("");
   const [uploading, setUploading] = useState(false);
 
   // --- INITIAL LOAD ---
@@ -87,7 +87,8 @@ export default function LiveClassRoom() {
   // --- SOCKET CONNECTION ---
   useEffect(() => {
     if ((mode === "prep" || mode === "live") && currentSession) {
-      socketRef.current = io("http://localhost:8928/live-session", {
+      // socketRef.current = io("http://localhost:8928/live-session", {
+      socketRef.current = io("https://sikshasetu-backend.onrender.com/live-session", {
         withCredentials: true
       });
 
@@ -97,7 +98,7 @@ export default function LiveClassRoom() {
         console.log("Connected to Live Session Socket");
         socket.emit("join-session", {
           sessionId: currentSession.sessionId,
-          userId: "TEACHER_ID_HERE",
+          userId: "TEACHER_ID_HERE", // Ideally fetch from AuthContext
           userName: "Teacher",
           role: "teacher"
         });
@@ -123,7 +124,6 @@ export default function LiveClassRoom() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
       setIsMuted(false);
-      // NOTE: In a real app, you would pass this 'stream' to WebRTC/SimplePeer here
       console.log("Microphone started");
     } catch (error) {
       console.error("Error accessing microphone:", error);
@@ -149,12 +149,26 @@ export default function LiveClassRoom() {
     }
   };
 
+  // --- SLIDE NAVIGATION & SYNC ---
+  const changeSlide = (newIndex) => {
+    if (newIndex < 0 || newIndex >= slidesDeck.length) return;
+    setSlideIndex(newIndex);
+
+    // Emit slide change to students
+    if (socketRef.current && isLive) {
+      socketRef.current.emit("slide-change", {
+        sessionId: currentSession.sessionId,
+        slideIndex: newIndex,
+        slideImage: slidesDeck[newIndex].imageUrl // Send image data for real-time sync
+      });
+    }
+  };
+
   // --- CHAT LOGIC ---
   const handleSendChat = (e) => {
     e.preventDefault();
     if (!chatInput.trim() || !socketRef.current) return;
 
-    // Emit to backend
     socketRef.current.emit("send-chat-message", {
       sessionId: currentSession.sessionId,
       message: chatInput
@@ -168,14 +182,17 @@ export default function LiveClassRoom() {
     e.preventDefault();
     setLoading(true);
     try {
-      await scheduleLiveClass(formData);
+      // Pass null or a default value for courseId if backend requires it, or just omit
+      await scheduleLiveClass({
+        ...formData,
+        courseId: null // Explicitly null as requested to remove field
+      });
       alert("Class scheduled successfully!");
       setMode("list");
       fetchSessions();
       setFormData({
         sessionTitle: "",
         shortDescription: "",
-        courseId: "",
         sessionHeading: "",
         date: "",
         time: "",
@@ -209,7 +226,6 @@ export default function LiveClassRoom() {
       await startLiveSession(currentSession.sessionId);
       setIsLive(true);
       setMode("live");
-      // Auto-start Mic when going live
       startMicrophone(); 
     } catch (error) {
       console.error("Start live error:", error);
@@ -224,7 +240,7 @@ export default function LiveClassRoom() {
     try {
       setLoading(true);
       await endLiveSession(currentSession.sessionId);
-      stopMicrophone(); // Kill Mic
+      stopMicrophone();
       setIsLive(false);
       setMode("list");
       fetchSessions();
@@ -246,7 +262,6 @@ export default function LiveClassRoom() {
     return () => clearInterval(interval);
   }, [isLive]);
 
-  // --- UPLOAD LOGIC ---
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !currentSession) return;
@@ -292,16 +307,24 @@ export default function LiveClassRoom() {
       }
       setSlidesDeck(slides);
       setSlideIndex(0);
+      
+      // Emit first slide immediately if live
+      if(isLive && socketRef.current && slides.length > 0) {
+         socketRef.current.emit("slide-change", {
+            sessionId: currentSession.sessionId,
+            slideIndex: 0,
+            slideImage: slides[0].imageUrl
+         });
+      }
+
     } catch (e) {
       console.error("PDF Render error", e);
     }
   };
 
-  // --- RENDER ---
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6">
       
-      {/* HEADER */}
       <header className="w-full max-w-7xl mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
@@ -320,7 +343,6 @@ export default function LiveClassRoom() {
         )}
       </header>
 
-      {/* === LIST MODE === */}
       {mode === "list" && (
         <div className="w-full max-w-7xl">
           <div className="flex justify-between items-center mb-6">
@@ -367,7 +389,6 @@ export default function LiveClassRoom() {
         </div>
       )}
 
-      {/* === SCHEDULE MODE === */}
       {mode === "schedule" && (
         <div className="w-full max-w-2xl bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
           <h2 className="text-2xl font-bold mb-6">Schedule a Class</h2>
@@ -381,18 +402,8 @@ export default function LiveClassRoom() {
                 onChange={e => setFormData({...formData, sessionTitle: e.target.value})}
               />
             </div>
-            {/* ... rest of your schedule inputs (Course ID, Date, Time etc.) ... */}
-            {/* Simplified for brevity - copy existing inputs from previous code */}
-             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Course ID</label>
-                <input 
-                  className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-black"
-                  value={formData.courseId}
-                  onChange={e => setFormData({...formData, courseId: e.target.value})}
-                  placeholder="e.g. course_123"
-                />
-              </div>
+
+             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Heading / Topic</label>
                 <input 
@@ -417,7 +428,7 @@ export default function LiveClassRoom() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
                 <input 
-                  type="time"
+                  type="time" 
                   required
                   className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-black"
                   value={formData.time}
@@ -446,11 +457,9 @@ export default function LiveClassRoom() {
         </div>
       )}
 
-      {/* === PREP & LIVE MODE === */}
       {(mode === "prep" || mode === "live") && currentSession && (
         <div className="w-full max-w-7xl flex flex-col lg:flex-row gap-6">
           
-          {/* MAIN PRESENTATION AREA */}
           <div className="flex-1 space-y-4">
             {/* Viewport */}
             <div className="bg-black/5 rounded-2xl p-4 border border-gray-200 min-h-[500px] flex flex-col justify-center items-center relative overflow-hidden">
@@ -468,11 +477,11 @@ export default function LiveClassRoom() {
                 </div>
               )}
 
-              {/* Slide Controls Overlay */}
+              {/* Slide Controls */}
               {slidesDeck.length > 0 && (
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4 bg-black/70 p-2 rounded-full backdrop-blur-md">
                   <button 
-                    onClick={() => setSlideIndex(Math.max(0, slideIndex - 1))}
+                    onClick={() => changeSlide(Math.max(0, slideIndex - 1))}
                     className="p-2 text-white hover:bg-white/20 rounded-full"
                   >
                     <FiChevronLeft size={24} />
@@ -481,7 +490,7 @@ export default function LiveClassRoom() {
                     {slideIndex + 1} / {slidesDeck.length}
                   </span>
                   <button 
-                    onClick={() => setSlideIndex(Math.min(slidesDeck.length - 1, slideIndex + 1))}
+                    onClick={() => changeSlide(Math.min(slidesDeck.length - 1, slideIndex + 1))}
                     className="p-2 text-white hover:bg-white/20 rounded-full"
                   >
                     <FiChevronRight size={24} />
@@ -490,7 +499,6 @@ export default function LiveClassRoom() {
               )}
             </div>
 
-            {/* Teacher Controls Bar */}
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-wrap gap-4 items-center justify-between">
               
               <div className="flex items-center gap-4">
@@ -530,13 +538,10 @@ export default function LiveClassRoom() {
             </div>
           </div>
 
-          {/* SIDEBAR: CHAT & STATS */}
           <div className="w-full lg:w-80 flex flex-col gap-4 h-[600px]">
             
-            {/* AUDIO & STATS BOX */}
             <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-4">
               
-              {/* Audio Controls */}
               <div>
                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Audio Stream</h3>
                 <button
@@ -550,7 +555,6 @@ export default function LiveClassRoom() {
                 </button>
               </div>
 
-              {/* Stats */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-green-50 p-2 rounded-xl border border-green-100 text-center">
                   <FiThumbsUp className="mx-auto text-green-600 mb-1" />
@@ -565,7 +569,6 @@ export default function LiveClassRoom() {
               </div>
             </div>
 
-            {/* CHAT AREA */}
             <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
               <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
                 <FiMessageSquare className="text-gray-500" />
@@ -585,7 +588,6 @@ export default function LiveClassRoom() {
                 )}
               </div>
               
-              {/* CHAT INPUT */}
               <div className="p-3 border-t border-gray-100">
                 {isLive ? (
                   <form onSubmit={handleSendChat} className="flex gap-2">
