@@ -12,8 +12,8 @@
 import axios from "axios";
 
 const client = axios.create({
-  baseURL: "http://localhost:8928",
-  // baseURL: "https://sikshasetu-backend.onrender.com",
+  // baseURL: "http://localhost:8928",
+  baseURL: "https://sikshasetu-backend-1030932275340.asia-south1.run.app/",
   withCredentials: true,
 });
 
