@@ -1,79 +1,80 @@
-import { approveStudent, getPendingStudents, rejectStudent } from "@/api/admin";
+import {
+  approveStudent,
+  getAllStudent,
+  getPendingStudents,
+  rejectStudent,
+} from "@/api/admin";
 import { Trophy } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { FiUsers, FiChevronDown, FiChevronUp, FiX } from "react-icons/fi";
+
+// Function to transform backend student data into the required structure
+const transformStudentData = (backendStudents) => {
+  return backendStudents.map((student) => ({
+    id: student.studentId, // Use studentId as the unique ID
+    name: student.studentName,
+    email: student.email,
+    enrolled: student.subject, // Map 'subject' to 'enrolled'
+    // --- Dummy Data for Stats (as backend only provides core info) ---
+    // You must fetch or calculate these stats separately if needed later
+    courses: [student.subject], // For display in modal
+    attendance: "N/A",
+    quizScores: { Subject: "N/A" },
+    streak: "N/A",
+    badges: ["New Member"],
+  }));
+};
 
 export default function StudentManagement({ organisationData }) {
   const [openCategory, setOpenCategory] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
 
-  // Organization details
-  const organizationName = "Presidency University";
+  // States for backend data
+  const [allStudents, setAllStudents] = useState([]); // Stores raw data from API
+  const [pendingRequests, setPendingRequests] = useState([]);
 
-  // Dummy student data
-  const [students, setStudents] = useState([
-    {
-      id: 1,
-      name: "Priya Singh",
-      email: "priya@mail.com",
-      enrolled: "AI/ML",
-      courses: ["AI/ML", "VLSI", "Renewable Energy"],
-      attendance: "92%",
-      quizScores: { Physics: "85%", Math: "72%" },
-      streak: "15 days",
-      badges: ["Top Learner", "Math Whiz"],
-    },
-    {
-      id: 2,
-      name: "Ravi Kumar",
-      email: "ravi@mail.com",
-      enrolled: "VLSI",
-      courses: ["VLSI"],
-      attendance: "88%",
-      quizScores: { Physics: "78%", Math: "67%" },
-      streak: "7 days",
-      badges: ["Fast Learner"],
-    },
-    {
-      id: 3,
-      name: "Ananya Rao",
-      email: "ananya@mail.com",
-      enrolled: "Others",
-      courses: ["Cyber Security", "Robotics"],
-      attendance: "95%",
-      quizScores: { Physics: "91%", Math: "88%" },
-      streak: "22 days",
-      badges: ["Top Learner", "Tech Explorer"],
-    },
-  ]);
+  // -----------------------
+  // Student Data Processing
+  // -----------------------
 
   const validCourses = ["AI/ML", "VLSI", "Renewable Energy"];
 
-  // group students by course (recomputed each render)
-  const grouped = {
-    "AI/ML": [],
-    VLSI: [],
-    "Renewable Energy": [],
-    Others: [],
-  };
+  // 1. Transform and memoize the active student list
+  const activeStudents = useMemo(() => {
+    return transformStudentData(allStudents);
+  }, [allStudents]);
 
-  students.forEach((student) => {
-    if (validCourses.includes(student.enrolled))
-      grouped[student.enrolled].push(student);
-    else grouped["Others"].push(student);
-  });
+  // 2. Group active students by course (uses the transformed data)
+  const grouped = useMemo(() => {
+    const initialGroup = {
+      "AI/ML": [],
+      VLSI: [],
+      "Renewable Energy": [],
+      Others: [],
+    };
+
+    activeStudents.forEach((student) => {
+      const course =
+        student.enrolled && validCourses.includes(student.enrolled)
+          ? student.enrolled
+          : "Others";
+      initialGroup[course].push(student);
+    });
+
+    return initialGroup;
+  }, [activeStudents]);
 
   const toggleCategory = (course) => {
     setOpenCategory(openCategory === course ? null : course);
   };
 
   // -----------------------
-  // Pending join requests
+  // API Calls
   // -----------------------
-  // Dummy pending requests so the menu is visible immediately
-  const [pendingRequests, setPendingRequests] = useState([]);
   const fetchPendingRequests = async () => {
     try {
+      // NOTE: Ensure organisationData is correctly loaded before calling API
+      if (!organisationData?.orgId) return;
       const response = await getPendingStudents(organisationData.orgId);
       console.log(response, "student requests");
       setPendingRequests(response.data.students || []);
@@ -82,38 +83,51 @@ export default function StudentManagement({ organisationData }) {
     }
   };
 
+  const getAllAstudentsList = async () => {
+    try {
+      const response = await getAllStudent();
+      console.log(response.data.students, "All approved students");
+      // Filter students by orgId if getAllStudent returns all students,
+      // otherwise, assume the backend filters by the admin's organization.
+      setAllStudents(response.data.students);
+    } catch (error) {
+      console.error("Error fetching all students:", error);
+    }
+  };
+
   useEffect(() => {
-    fetchPendingRequests();
-  }, []);
-  // Accept request: add student to students list and remove from pending
+    if (organisationData?.orgId) {
+      fetchPendingRequests();
+      getAllAstudentsList();
+    }
+  }, [organisationData]); // Dependency on organisationData
+
+  // Accept request: fetch updated lists
   const acceptRequest = async (req) => {
     try {
-      const response = await approveStudent(req.studentId);
-      await fetchPendingRequests();
-      console.log(response, "approve student response");
+      await approveStudent(req.studentId);
+      // Refresh both lists after acceptance
+      await Promise.all([fetchPendingRequests(), getAllAstudentsList()]);
+      console.log("Student approved successfully.");
     } catch (error) {
-      console.log(error, "error approving student");
+      console.error("Error approving student:", error);
     }
   };
 
-  // Decline request: remove from pending only
+  // Decline request: fetch updated pending list
   const declineRequest = async (req) => {
     try {
-      const response = await rejectStudent(
-        req.studentId,
-        "Not eligible at this time"
-      );
-      await fetchPendingRequests();
+      await rejectStudent(req.studentId, "Not eligible at this time");
+      await fetchPendingRequests(); // Only refresh pending list
+      console.log("Student rejected successfully.");
     } catch (error) {
-      console.log(error, "error rejecting student");
+      console.error("Error rejecting student:", error);
     }
   };
-
-  console.log(organisationData, "org data in student mgmt");
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-      {/* ORG HEADER CLEAN (NO DP) */}
+      {/* ORG HEADER */}
       <div className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 rounded-xl shadow flex items-center justify-between">
         <div>
           <h1 className="text-xl md:text-2xl font-bold">
@@ -125,7 +139,7 @@ export default function StudentManagement({ organisationData }) {
 
       {/* Students Header */}
       <h2 className="text-2xl font-bold text-purple-700 flex items-center gap-2">
-        <FiUsers /> Students ({students.length})
+        <FiUsers /> Students ({activeStudents.length})
       </h2>
 
       {/* Category Wise Listing */}
@@ -208,12 +222,14 @@ export default function StudentManagement({ organisationData }) {
                 Courses: {selectedStudent.courses.length}
               </p>
               <ul className="mt-2 list-disc pl-6 text-sm text-purple-900">
+                {/* Courses list now uses the dynamic 'subject' from backend */}
                 {selectedStudent.courses.map((c, i) => (
                   <li key={i}>{c}</li>
                 ))}
               </ul>
             </div>
 
+            {/* Note: The following blocks will display "N/A" for missing data */}
             <div className="bg-green-50 p-4 rounded-lg">
               <p className="font-semibold text-green-700">Attendance</p>
               <p className="text-lg font-bold">{selectedStudent.attendance}</p>
@@ -251,7 +267,7 @@ export default function StudentManagement({ organisationData }) {
 
       {/* =========================
           Horizontal Pending Requests Menu
-         ========================= */}
+          ========================= */}
       <div className="mt-6">
         <h3 className="text-lg font-semibold mb-3">New Join Requests</h3>
 

@@ -32,3 +32,5 @@ export const getAllOrganizations = () =>
 
 export const getTeacherRequest = () =>
   client.get("/api/organization/teachers/requests");
+
+export const getAllStudent = () => client.get("/api/organization/students");
