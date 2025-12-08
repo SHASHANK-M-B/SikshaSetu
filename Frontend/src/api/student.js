@@ -33,7 +33,7 @@ export const lessionBundles = () => client.get("/api/student/bundles");
 export const getStudentAnalytics = (params) =>
   client.get("/api/student/analytics", { params });
 
-// quizzes
+// Quizzes
 export const listOfQuizes = () => client.get("/api/student/quizzes");
 export const getQuizQuestion = (id) => client.get(`/api/student/quiz/${id}`);
 export const submitQuizResponses = (id, data) =>
@@ -42,3 +42,24 @@ export const submitQuizResponses = (id, data) =>
 export const enrollToCourse = (id) =>
   client.post(`/api/student/course/${id}/enroll`);
 export const joinedToCourses = (id) => client.get(`/api/student/courses`);
+
+// ==========================================
+// DISCUSSIONS / DOUBTS APIs (ADDED)
+// ==========================================
+export const createDiscussion = (data) => 
+  client.post("/api/student/discussions", data);
+
+export const getMyDiscussions = () => 
+  client.get("/api/student/discussions/my");
+
+export const getAllDiscussions = () => 
+  client.get("/api/student/discussions/all");
+
+export const getDiscussionThread = (id) => 
+  client.get(`/api/student/discussions/${id}`);
+
+export const replyToDiscussion = (id, data) => 
+  client.post(`/api/student/discussions/${id}/reply`, data);
+
+export const markResolved = (id) => 
+  client.put(`/api/student/discussions/${id}/resolve`);

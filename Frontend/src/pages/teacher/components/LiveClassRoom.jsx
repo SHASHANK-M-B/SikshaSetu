@@ -35,7 +35,7 @@ import {
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 // --- CONSTANTS AND UTILS ---
-const SOCKET_URL = "https://sikshasetu-backend.onrender.com/live-session";
+const SOCKET_URL = "https://sikshasetu-backend-1030932275340.asia-south1.run.app";
 const fmt = (s) => new Date(s * 1000).toISOString().substr(11, 8);
 const uid = () => Math.random().toString(36).slice(2, 9);
 const TEACHER_ID = "TEACHER_ID_HERE";

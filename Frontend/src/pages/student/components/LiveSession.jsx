@@ -20,7 +20,7 @@ import {
 } from "@/api/student";
 
 // --- CONSTANTS AND UTILS ---
-const SOCKET_URL = "https://sikshasetu-backend.onrender.com/live-session";
+const SOCKET_URL = "https://sikshasetu-backend-1030932275340.asia-south1.run.app";
 const STUDENT_ID = "STUDENT_ID_HERE"; // Placeholder: Replace with actual user ID from Auth
 const STUDENT_NAME = "Student Name"; // Placeholder: Replace with actual user Name
 

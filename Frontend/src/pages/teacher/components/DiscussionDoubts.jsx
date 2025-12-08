@@ -3,7 +3,7 @@ import {
   getAllDiscussions,
   getDiscussionThread,
   replyToDiscussion,
-  // updateDiscussionStatus,
+  updateDiscussionStatus,
 } from "@/api/teacher";
 import {
   FiThumbsUp,
@@ -19,9 +19,11 @@ const uid = (p = "") => p + Math.random().toString(36).slice(2, 9);
 export default function DiscussionDoubts() {
   const [doubts, setDoubts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState([]); // Local state for now (no backend endpoint)
 
+  // Broadcast State
   const [teacherMsg, setTeacherMsg] = useState("");
+
+  // Reply State
   const [replyOpen, setReplyOpen] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [replyingId, setReplyingId] = useState(null);
@@ -34,13 +36,12 @@ export default function DiscussionDoubts() {
   const fetchDoubts = async () => {
     try {
       setLoading(true);
-      // 1. Get List (Returns basic info: title, studentName, etc.)
+      // 1. Get List
       const { data } = await getAllDiscussions();
       const basicList = data.discussions || [];
 
       // 2. Hydrate with Details (Description & Replies)
-      // The list API doesn't return the full description or replies array,
-      // so we fetch thread details for each item to populate the UI fully.
+      // We fetch thread details for each to get the full description and replies
       const detailedDoubts = await Promise.all(
         basicList.map(async (item) => {
           try {
@@ -50,7 +51,6 @@ export default function DiscussionDoubts() {
               // Backend 'description' maps to UI 'text'
               text: threadRes.data.discussion.description || item.title,
               replies: threadRes.data.replies || [],
-              // Normalize ID
               id: item.discussionId,
             };
           } catch (e) {
@@ -73,32 +73,18 @@ export default function DiscussionDoubts() {
     }
   };
 
-  // --- BROADCAST (Mock / UI Only) ---
+  // --- BROADCAST (Simulation) ---
   const postTeacherMessage = (e) => {
     e.preventDefault();
     if (!teacherMsg.trim()) return;
-
-    // NOTE: Backend doesn't have a broadcast endpoint yet.
-    // This just updates local state for visual feedback.
-    setNotifications((n) => [
-      ...n,
-      {
-        id: uid("n_"),
-        for: "student",
-        message: teacherMsg,
-        type: "broadcast",
-        at: new Date().toISOString(),
-      },
-    ]);
-
     setTeacherMsg("");
-    alert("Message sent to all students (Simulation)");
+    alert("Broadcast feature coming soon (Backend integration pending)");
   };
 
   // --- ACTIONS ---
 
   const like = (id) => {
-    // Backend doesn't support 'likes' yet. Local update only.
+    // Local optimistic update only (No backend endpoint for likes yet)
     setDoubts((d) => d.map((x) => (x.id === id ? { ...x, liked: true } : x)));
   };
 
@@ -108,20 +94,13 @@ export default function DiscussionDoubts() {
       setDoubts((d) =>
         d.map((x) => (x.id === id ? { ...x, status: "resolved" } : x))
       );
-      await updateDiscussionStatus(id, "resolved");
+      // API call: Payload must be an object { status: "resolved" }
+      await updateDiscussionStatus(id, { status: "resolved" });
     } catch (error) {
       console.error("Failed to resolve", error);
       alert("Failed to update status");
       fetchDoubts(); // Revert on error
     }
-  };
-
-  const deleteDoubt = (id) => {
-    // Backend teacherRoutes.js does NOT expose a DELETE method for discussions.
-    // We cannot perform this action on the server currently.
-    alert(
-      "Delete functionality is not currently enabled for Teachers in the backend."
-    );
   };
 
   const submitReply = async (id) => {
@@ -130,15 +109,16 @@ export default function DiscussionDoubts() {
     try {
       setReplyingId(id);
 
+      // Backend expects { messageText: string }
       const payload = { messageText: replyText };
       const { data } = await replyToDiscussion(id, payload);
 
-      // data.reply contains the new reply object from backend
       const newReply = {
         id: data.reply.replyId || uid("rep_"),
-        text: data.reply.messageText,
-        at: data.reply.createdAt || new Date().toISOString(),
-        by: "Teacher", // Or use req.user.name from context
+        messageText: data.reply.messageText,
+        createdAt: data.reply.createdAt, // Backend returns firestore timestamp or ISO
+        userName: data.reply.userName || "Teacher",
+        role: "teacher",
       };
 
       setDoubts((prev) =>
@@ -150,7 +130,8 @@ export default function DiscussionDoubts() {
       );
 
       setReplyText("");
-      setReplyOpen(null);
+      // Optional: keep reply open or close it
+      // setReplyOpen(null);
     } catch (error) {
       console.error("Reply failed", error);
       alert("Failed to send reply");
@@ -225,19 +206,29 @@ export default function DiscussionDoubts() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-lg text-gray-900">
-                    {d.studentName || d.student || "Unknown Student"}
+                    {d.studentName || "Unknown Student"}
                   </span>
                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                    {d.course?.courseCode || "General"}
+                    {d.course?.courseCode || d.subject || "General"}
                   </span>
                 </div>
-                <div className="text-gray-700 mt-2 whitespace-pre-wrap">
-                  {d.text}
+
+                {/* Title and Description */}
+                <div className="mt-2">
+                  <h4 className="font-semibold text-gray-800">{d.title}</h4>
+                  <p className="text-gray-700 mt-1 whitespace-pre-wrap">
+                    {d.text}
+                  </p>
                 </div>
+
                 <div className="text-xs text-gray-400 mt-2">
                   Posted:{" "}
                   {d.createdAt
-                    ? new Date(d.createdAt._seconds * 1000).toLocaleString()
+                    ? new Date(
+                        d.createdAt._seconds
+                          ? d.createdAt._seconds * 1000
+                          : d.createdAt
+                      ).toLocaleString()
                     : "Just now"}
                 </div>
               </div>
@@ -288,14 +279,6 @@ export default function DiscussionDoubts() {
                   Resolve
                 </button>
               )}
-
-              <button
-                onClick={() => deleteDoubt(d.id)}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-transparent text-gray-400 hover:text-red-500 transition ml-auto"
-                title="Delete functionality unavailable"
-              >
-                <FiTrash2 size={16} />
-              </button>
             </div>
 
             {/* REPLY SECTION */}
@@ -334,25 +317,36 @@ export default function DiscussionDoubts() {
                 </div>
                 {d.replies.map((r, idx) => (
                   <div
-                    key={idx}
-                    className="bg-white border border-gray-100 rounded-lg p-3 shadow-sm"
+                    key={r.replyId || idx}
+                    className={`border rounded-lg p-3 shadow-sm ${
+                      r.role === "teacher"
+                        ? "bg-blue-50 border-blue-100"
+                        : "bg-white border-gray-100"
+                    }`}
                   >
                     <div className="flex justify-between items-start">
-                      <span className="text-xs font-bold text-blue-600">
-                        {r.userName || r.by || "Teacher"}
+                      <span
+                        className={`text-xs font-bold ${
+                          r.role === "teacher"
+                            ? "text-blue-600"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        {r.userName || r.by || "User"}
+                        {r.role === "teacher" && " (Teacher)"}
                       </span>
                       <span className="text-[10px] text-gray-400">
                         {r.createdAt
                           ? new Date(
-                              r.createdAt._seconds * 1000
+                              r.createdAt._seconds
+                                ? r.createdAt._seconds * 1000
+                                : r.createdAt
                             ).toLocaleString()
-                          : r.at
-                          ? new Date(r.at).toLocaleString()
                           : ""}
                       </span>
                     </div>
                     <div className="text-sm text-gray-800 mt-1">
-                      {r.messageText || r.text}
+                      {r.messageText}
                     </div>
                   </div>
                 ))}

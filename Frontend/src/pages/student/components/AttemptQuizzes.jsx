@@ -40,29 +40,40 @@ function QuizAttemptScreen({ quizId, onBack }) {
     setAnswers((prev) => ({ ...prev, [questionId]: selectedAnswer }));
   };
 
-  const handleSubmit = async (id) => {
-    //  await submitQuizResponses(id)
-
+  const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Structure submission data
-      const submissionData = Object.keys(answers).map((qid) => ({
-        answers: qid,
-      }));
+      // 1. Get the list of questions from state to ensure correct order
+      const questionList = questions?.questions || [];
 
-      // Call the submission API
-      const response = await submitQuizResponses(quizId, {answers:"1"});
+      // 2. Map through the questions in order. 
+      // Look up the answer in the 'answers' state by question ID.
+      // If not answered, send -1 (treated as wrong/skipped).
+      const formattedAnswers = questionList.map((q) => {
+        return answers[q.id] !== undefined ? answers[q.id] : -1;
+      });
 
-      // Handle the response and set the result state
+      // 3. Construct the payload strictly as the backend expects
+      // Schema: { "answers": [0, 2, 1, -1, ...] }
+      const payload = {
+        answers: formattedAnswers
+      };
+
+      console.log("Submitting Payload:", payload); // Debug log
+
+      // 4. Call the API with the correct payload
+      const response = await submitQuizResponses(quizId, payload);
+
+      // 5. Handle success
       setSubmitResult({
         score: response.data.score,
         message: response.data.message || "Quiz submitted successfully!",
-        isSuccessful: response.data.isSuccessful || true,
+        isSuccessful: true,
       });
     } catch (error) {
       console.error("Submission failed:", error);
       setSubmitResult({
-        message: "Submission failed. Please try again.",
+        message: error.response?.data?.message || "Submission failed. Please try again.",
         isSuccessful: false,
         score: null,
       });
