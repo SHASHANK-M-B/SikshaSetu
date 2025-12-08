@@ -3,6 +3,7 @@ import {
   listOfQuizes,
   submitQuizResponses,
 } from "@/api/student";
+import { Divide } from "lucide-react";
 import React, { useState, useEffect } from "react";
 
 // ===========================================
@@ -16,7 +17,7 @@ function QuizAttemptScreen({ quizId, onBack }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState(null);
-
+  console.log(questions, "questions");
   // Effect to fetch questions dynamically using the provided API
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -39,22 +40,18 @@ function QuizAttemptScreen({ quizId, onBack }) {
     setAnswers((prev) => ({ ...prev, [questionId]: selectedAnswer }));
   };
 
-  const handleSubmit = async () => {
-    if (Object.keys(answers).length !== questions.length) {
-      alert("Please answer all questions before submitting.");
-      return;
-    }
+  const handleSubmit = async (id) => {
+    //  await submitQuizResponses(id)
 
     setIsSubmitting(true);
     try {
       // Structure submission data
       const submissionData = Object.keys(answers).map((qid) => ({
-        questionId: qid,
-        selectedOption: answers[qid],
+        answers: qid,
       }));
 
       // Call the submission API
-      const response = await submitQuizResponses(quizId, submissionData);
+      const response = await submitQuizResponses(quizId, {answers:"1"});
 
       // Handle the response and set the result state
       setSubmitResult({
@@ -126,62 +123,75 @@ function QuizAttemptScreen({ quizId, onBack }) {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 px-3 sm:px-10 py-6 space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b">
-        <h2 className="text-3xl font-bold text-indigo-700">
-          Quiz Attempt: {questions[3]}
-        </h2>
-        <button
-          onClick={onBack}
-          className="text-sm px-4 py-2 border rounded-lg hover:bg-gray-100 transition"
-          disabled={isSubmitting}
-        >
-          &larr; Back to List
-        </button>
-      </div>
+  <div className="min-h-screen w-full bg-gray-50 px-3 sm:px-10 py-6 space-y-6">
 
-      <div className="space-y-8">
-        {Array.isArray(questions) &&
-          questions.map((q, index) => (
-            <div
-              key={q.id}
-              className="bg-white p-6 rounded-xl shadow-md border"
-            >
-              <p className="text-lg font-semibold text-gray-800 mb-4">
-                {index + 1}. {q.questionText}
-              </p>
-              <div className="space-y-2">
-                {q.options &&
-                  q.options.map((option) => (
-                    <label
-                      key={option}
-                      className="flex items-center space-x-3 cursor-pointer p-2 rounded-lg hover:bg-indigo-50"
-                    >
-                      <input
-                        type="radio"
-                        name={`question-${q.id}`}
-                        value={option}
-                        checked={answers[q.id] === option}
-                        onChange={() => handleAnswerChange(q.id, option)}
-                        className="form-radio h-5 w-5 text-indigo-600"
-                        disabled={isSubmitting}
-                      />
-                      <span className="text-gray-700">{option}</span>
-                    </label>
-                  ))}
-              </div>
-            </div>
-          ))}
-      </div>
-
-      <button
-        onClick={handleSubmit}
-        disabled={isSubmitting}
-        className="w-full mt-8 px-6 py-4 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-      >
-        {isSubmitting ? "Submitting..." : "Submit Quiz"}
-      </button>
+  {/* Header */}
+  <div className="flex justify-between items-center pb-4 border-b">
+    <div className="text-[14px] font-bold text-indigo-700">
+      Quiz Title: {questions?.quizTitle}
     </div>
+    <div className="text-[14px] font-bold text-indigo-700">
+      Time Limit : {questions?.timeLimit} mins
+    </div>
+    <div className="text-[14px] font-bold text-indigo-700">
+      Total Questions : {questions?.totalQuestions}
+    </div>
+    <button
+      onClick={onBack}
+      className="text-sm px-4 py-2 border rounded-lg hover:bg-gray-100 transition"
+      disabled={isSubmitting}
+    >
+      &larr; Back to List
+    </button>
+  </div>
+
+  {/* Questions List */}
+  <div className="space-y-8">
+    {Array.isArray(questions?.questions) &&
+      questions.questions.map((q, index) => (
+        <div
+          key={q.id}
+          className="bg-white p-6 rounded-xl shadow-md border"
+        >
+          <p className="text-lg font-semibold text-gray-800 mb-4">
+            {index + 1}. {q.questionText}
+          </p>
+
+          <div className="space-y-2">
+            {q.options?.map((option, optionIndex) => (
+              <label
+                key={optionIndex}
+                className="flex items-center space-x-3 cursor-pointer p-2 rounded-lg hover:bg-indigo-50"
+              >
+                <input
+                  type="radio"
+                  name={`question-${q.id}`}
+                  value={optionIndex}
+                  checked={answers[q.id] === optionIndex}
+                  onChange={() =>
+                    handleAnswerChange(q.id, optionIndex)
+                  }
+                  className="form-radio h-5 w-5 text-indigo-600"
+                  disabled={isSubmitting}
+                />
+                <span className="text-gray-700">{option}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+  </div>
+
+  {/* Submit Button */}
+  <button
+    onClick={() => handleSubmit(questions?.quizId)}
+    disabled={isSubmitting}
+    className="w-full mt-8 px-6 py-4 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+  >
+    {isSubmitting ? "Submitting..." : "Submit Quiz"}
+  </button>
+</div>
+
   );
 }
 

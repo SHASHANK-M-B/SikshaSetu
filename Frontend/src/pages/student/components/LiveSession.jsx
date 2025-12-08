@@ -263,21 +263,39 @@ pc.ontrack = (event) => {
       });
 
       // 3. WebRTC Signaling Listeners
-      socket.on("webrtc-offer", async ({ offer, fromSocketId }) => {
-        // Note: fromSocketId is the teacher's socket ID
-        const pc = await createPeerConnection(fromSocketId);
-        
-        await pc.setRemoteDescription(new RTCSessionDescription(offer.sdp));
-        
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
+//       socket.on("webrtc-offer", async ({ offer, fromSocketId }) => {
+//         // Note: fromSocketId is the teacher's socket ID
+//         const pc = await createPeerConnection(fromSocketId);
+//         
+//         await pc.setRemoteDescription(new RTCSessionDescription(offer.sdp));
+//         
+//         const answer = await pc.createAnswer();
+//         await pc.setLocalDescription(answer);
 
-        socket.emit("webrtc-answer", {
-          sessionId: activeClass.sessionId,
-          answer: pc.localDescription,
-          targetSocketId: fromSocketId
-        });
-      });
+//         socket.emit("webrtc-answer", {
+//           sessionId: activeClass.sessionId,
+//           answer: pc.localDescription,
+//           targetSocketId: fromSocketId
+//         });
+//       });
+
+// LiveSession.jsx
+
+      socket.on("webrtc-offer", async ({ offer, fromSocketId }) => {
+        const pc = await createPeerConnection(fromSocketId);
+        
+        // FIX: Pass the entire 'offer' object, not just 'offer.sdp'
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        socket.emit("webrtc-answer", {
+          sessionId: activeClass.sessionId,
+          answer: pc.localDescription,
+          targetSocketId: fromSocketId
+        });
+      });
 
       socket.on("webrtc-ice-candidate", async ({ candidate }) => {
         const pc = peerConnectionRef.current;

@@ -1,4 +1,4 @@
-import { getAllCourses } from "@/api/student";
+import { enrollToCourse, getAllCourses, joinedToCourses } from "@/api/student";
 import { getCourses } from "@/api/teacher";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import { FiPlayCircle, FiPlusCircle } from "react-icons/fi";
@@ -36,19 +36,19 @@ export default function ViewCourses() {
   //   ];
 
   const [joinedCourses, setJoinedCourses] = useState([]);
+  const [joinLoading, setJoinLoading] = useState(false);
 
-  const handleJoin = (course) => {
-    const newCourse = {
-      ...course,
-      progress: 0,
-    };
-    setJoinedCourses([...joinedCourses, newCourse]);
+  const handleJoin = async (id) => {
+    setJoinLoading(true);
+    await enrollToCourse(id);
+    setJoinLoading(false);
   };
 
   const [courses, setCourses] = useState([]);
   const getAllCourses = async () => {
     const response = await getCourses();
     setCourses(response.data.courses);
+
     try {
     } catch (error) {}
   };
@@ -58,7 +58,8 @@ export default function ViewCourses() {
   }, []);
   const getListOfCourses = async () => {
     try {
-      const response = await getAllCourses();
+      // const response = await getAllCourses();
+      const response = await joinedToCourses();
       setJoinedCourses(response.data.courses);
     } catch (error) {}
   };
@@ -78,24 +79,25 @@ export default function ViewCourses() {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {availableCourses.map((course) => (
+          {courses.map((course) => (
             <div
               key={course.code}
               className="p-6 rounded-2xl bg-white shadow-md border hover:shadow-xl hover:-translate-y-1 transition"
             >
               <h3 className="text-xl font-bold text-indigo-600">
-                {course.code}
+                {course.courseCode}
               </h3>
-              <p className="text-lg font-semibold">{course.name}</p>
+              <p className="text-lg font-semibold">{course.courseName}</p>
               <p className="text-sm text-gray-500 mt-1">
-                Instructor: {course.instructor}
+                {course.shortDescription}
               </p>
 
               <button
-                onClick={() => handleJoin(course)}
-                className="mt-4 w-full py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 flex items-center justify-center gap-2"
+                onClick={() => handleJoin(course.id)}
+                className="mt-4 w-full py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 flex items-center justify-center gap-2 cursor-pointer"
               >
-                <FiPlusCircle className="text-lg" /> Join Course
+                <FiPlusCircle className="text-lg" />{" "}
+                {joinLoading ? "Joining" : "Join Course"}
               </button>
             </div>
           ))}
@@ -121,9 +123,9 @@ export default function ViewCourses() {
                 <h3 className="text-xl font-bold text-indigo-600">
                   {course.code}
                 </h3>
-                <p className="text-lg font-semibold">{course.name}</p>
+                <p className="text-lg font-semibold">{course.courseName}</p>
                 <p className="text-sm text-gray-500 mt-1">
-                  Instructor: {course.instructor}
+                  {course.shortDescription}
                 </p>
 
                 <div className="mt-4">
@@ -140,7 +142,7 @@ export default function ViewCourses() {
                   </div>
                 </div>
 
-                <button className="mt-4 w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2">
+                <button className="mt-4 w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2 cursor-pointer">
                   <FiPlayCircle /> Resume Learning
                 </button>
               </div>

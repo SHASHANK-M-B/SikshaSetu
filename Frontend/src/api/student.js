@@ -37,4 +37,8 @@ export const getStudentAnalytics = (params) =>
 export const listOfQuizes = () => client.get("/api/student/quizzes");
 export const getQuizQuestion = (id) => client.get(`/api/student/quiz/${id}`);
 export const submitQuizResponses = (id, data) =>
-  client.get(`/api/student/quiz/${id}/attempt`, data);
+  client.post(`/api/student/quiz/${id}/submit`, data);
+
+export const enrollToCourse = (id) =>
+  client.post(`/api/student/course/${id}/enroll`);
+export const joinedToCourses = (id) => client.get(`/api/student/courses`);
