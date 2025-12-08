@@ -19,21 +19,18 @@ const AuthModal = ({ initialFormType = "login", onClose }) => {
   const modalRef = useRef(null);
   const scrollRef = useRef(null);
 
-  // Lock background scroll
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => (document.body.style.overflow = prev || "auto");
   }, []);
 
-  // Close on ESC
   useEffect(() => {
     const closeKey = (e) => e.key === "Escape" && onClose && onClose();
     window.addEventListener("keydown", closeKey);
     return () => window.removeEventListener("keydown", closeKey);
   }, [onClose]);
 
-  // Scroll to top when role changes
   useEffect(() => {
     if (mode === "register" && scrollRef.current) {
       scrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
@@ -73,9 +70,8 @@ const AuthModal = ({ initialFormType = "login", onClose }) => {
           ref={scrollRef}
           className="max-h-[85vh] overflow-y-auto customScroll pr-2"
         >
-          {/* Role Selector */}
           <div className="space-y-2 mb-3 text-left">
-            <p className="text-[11px] font-semibold text-gray-300">
+            <p className="text-[11px] font-semibold text-black">
               Select your role
             </p>
 
@@ -107,7 +103,6 @@ const AuthModal = ({ initialFormType = "login", onClose }) => {
             </div>
           </div>
 
-          {/* FORM */}
           {role === "organization" && (
             <OrganizationForm
               showToast={showToast}
@@ -134,7 +129,7 @@ const AuthModal = ({ initialFormType = "login", onClose }) => {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         onMouseDown={onBackdropClick}
       >
         <AnimatePresence>
@@ -145,45 +140,39 @@ const AuthModal = ({ initialFormType = "login", onClose }) => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.95 }}
             transition={{ duration: 0.22 }}
-            className="w-full max-w-4xl bg-[#050816]/95 border border-cyan-500/20 rounded-2xl relative"
+            className="w-full max-w-4xl bg-gradient-to-br from-[#f5f7f6] via-[#faf9f6] to-white border border-black/10 rounded-2xl relative shadow-2xl"
           >
-            {/* Close */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 rounded-full bg-black/40 hover:bg-black/70 border border-gray-700 text-gray-300 hover:text-white transition"
+              className="absolute top-4 right-4 p-2 rounded-full bg-white hover:bg-gray-100 border border-gray-300 text-black transition"
             >
               <FiX className="text-xl" />
             </button>
 
-            {/* CONTENT */}
             <div className="px-5 sm:px-7 py-6">
-              {/* Tabs */}
               <div className="flex gap-4 text-xs mb-4">
                 <button
                   onClick={() => setMode("login")}
-                  className={`pb-2 font-semibold border-b-2 ${
-                    mode === "login"
-                      ? "border-cyan-400 text-cyan-300"
-                      : "border-transparent text-gray-400"
-                  }`}
+                  className={`pb-2 font-semibold border-b-2 ${mode === "login"
+                    ? "border-emerald-500 text-black"
+                    : "border-transparent text-black"
+                    }`}
                 >
                   Login
                 </button>
 
                 <button
                   onClick={() => setMode("register")}
-                  className={`pb-2 font-semibold border-b-2 ${
-                    mode === "register"
-                      ? "border-cyan-400 text-cyan-300"
-                      : "border-transparent text-gray-400"
-                  }`}
+                  className={`pb-2 font-semibold border-b-2 ${mode === "register"
+                    ? "border-emerald-500 text-black"
+                    : "border-transparent text-black"
+                    }`}
                 >
                   Register
                 </button>
               </div>
 
-              {/* Title */}
-              <h2 className="text-xl font-extrabold text-white mb-2">
+              <h2 className="text-xl font-extrabold text-black mb-2">
                 {headerTitle}
               </h2>
 

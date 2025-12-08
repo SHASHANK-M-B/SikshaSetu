@@ -51,7 +51,7 @@ const ForgotPasswordForm = ({ switchMode, showToast }) => {
 
             <button
                 type="submit"
-                className="w-full p-3 bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white rounded-lg shadow-lg text-xs font-semibold"
+                className="w-full p-3 border border-emerald-500 hover:bg-emerald-50 text-emerald-600 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition"
             >
                 Send Reset Link
             </button>
@@ -59,7 +59,7 @@ const ForgotPasswordForm = ({ switchMode, showToast }) => {
             <button
                 type="button"
                 onClick={() => switchMode("login")}
-                className="w-full p-3 border border-gray-600 rounded-lg text-xs text-gray-300 hover:bg-gray-800/60"
+                className="w-full p-3 border border-gray-300 rounded-lg text-xs text-black hover:bg-gray-100 transition"
             >
                 Back to Login
             </button>

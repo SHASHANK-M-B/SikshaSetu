@@ -126,10 +126,9 @@ const OTPLoginForm = ({ switchMode, showToast }) => {
       type="button"
       onClick={() => setRole(id)}
       className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs border transition
-        ${
-          role === id
-            ? "bg-cyan-500/20 border-cyan-400 text-cyan-200"
-            : "bg-black/30 border-gray-700 text-gray-400 hover:bg-black/50"
+        ${role === id
+          ? "bg-emerald-100 border-emerald-400 text-black"
+          : "bg-white border-gray-300 text-black hover:bg-gray-100"
         }`}
     >
       {id === "organization" && <FiShield />}
@@ -144,7 +143,7 @@ const OTPLoginForm = ({ switchMode, showToast }) => {
       {step === 1 && (
         <form onSubmit={sendOtp} className="space-y-4">
           <div className="flex flex-col gap-2">
-            <label className="text-[11px] text-gray-300 font-semibold">
+            <label className="text-[11px] text-black font-semibold">
               Choose Your Role
             </label>
             <div className="flex gap-2 flex-wrap">
@@ -153,7 +152,7 @@ const OTPLoginForm = ({ switchMode, showToast }) => {
               <RoleCard id="student" label="Student" />
             </div>
             {errors.role && (
-              <span className="text-[10px] text-red-400">{errors.role}</span>
+              <span className="text-[10px] text-red-600">{errors.role}</span>
             )}
           </div>
 
@@ -181,7 +180,7 @@ const OTPLoginForm = ({ switchMode, showToast }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full p-3 bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-xs font-semibold flex items-center justify-center gap-2 transition"
+            className="w-full p-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-xs font-semibold flex items-center justify-center gap-2 transition"
           >
             <FiKey className="w-4 h-4" />
             {loading ? "Sending..." : "Send OTP"}
@@ -190,7 +189,7 @@ const OTPLoginForm = ({ switchMode, showToast }) => {
           <button
             type="button"
             onClick={() => switchMode("login")}
-            className="w-full p-3 border border-gray-600 rounded-lg text-xs text-gray-300 hover:bg-gray-800/60"
+            className="w-full p-3 border border-gray-300 rounded-lg text-xs text-black hover:bg-gray-100 transition"
           >
             Back to Login
           </button>
@@ -210,7 +209,7 @@ const OTPLoginForm = ({ switchMode, showToast }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full p-3 bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-xs font-semibold transition"
+            className="w-full p-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-lg shadow-lg text-xs font-semibold transition"
           >
             {loading ? "Verifying..." : "Verify & Login"}
           </button>
@@ -218,7 +217,7 @@ const OTPLoginForm = ({ switchMode, showToast }) => {
           <button
             type="button"
             onClick={() => setStep(1)}
-            className="w-full p-3 border border-gray-600 rounded-lg text-xs text-gray-300 hover:bg-gray-800/60"
+            className="w-full p-3 border border-gray-300 rounded-lg text-xs text-black hover:bg-gray-100 transition"
           >
             Resend / Change Email
           </button>
