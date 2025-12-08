@@ -36,7 +36,7 @@ import { useNavigate } from "react-router-dom";
 const ORG_LOGO = "https://i.ibb.co/4Z1qZ4D/default-org.png";
 
 const THEME = {
-  gradient: "bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600",
+  gradient: "bg-blue-600",
 };
 
 const navItems = [
@@ -238,7 +238,7 @@ export default function StudentDashboard() {
       {/* DESKTOP SIDEBAR */}
       <aside
         className={`hidden lg:flex flex-col h-screen shadow-xl 
-                bg-white/10 border-r border-white/20 text-white transition-all duration-300
+                 border-r border-white/20 text-white transition-all duration-300
                 ${THEME.gradient} ${
           isSidebarOpen ? "w-72" : "w-20"
         } flex-shrink-0`}

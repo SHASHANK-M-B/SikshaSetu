@@ -77,7 +77,8 @@ export default function AIStudio() {
 
     try {
       // API Call
-      const { data } = await askAI(currentQuery);
+   const { data } = await askAI({ query: currentQuery });
+
 
       // Add AI Response
       setMessages((prev) => [

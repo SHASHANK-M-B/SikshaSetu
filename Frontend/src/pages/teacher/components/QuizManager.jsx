@@ -458,7 +458,7 @@ export default function QuizManager() {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-6">
-              {viewQuiz.questions.map((q, i) => (
+              {Array.isArray(viewQuiz.questions) &&viewQuiz.questions.map((q, i) => (
                 <div key={i} className="space-y-3">
                   <p className="font-medium text-lg">
                     {i + 1}. {q.questionText}

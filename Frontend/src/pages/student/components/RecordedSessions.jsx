@@ -96,6 +96,24 @@ export default function RecordedSession() {
     getRecordedSessionLists();
   }, []);
 
+  const convertTimestamp = (timestamp) => {
+  if (!timestamp?._seconds) return "";
+
+  const date = new Date(
+    timestamp._seconds * 1000 + timestamp._nanoseconds / 1e6
+  );
+
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+
   if (activeSession) {
     const currentSlide = activeSession.slides[currentSlideIndex] || null;
 
@@ -283,10 +301,10 @@ export default function RecordedSession() {
             <thead className="bg-slate-50 border-b">
               <tr>
                 <th className="text-left px-4 py-3 font-semibold text-slate-600">
-                  Course
+                  Title
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-600">
-                  Title
+                  Description
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-600">
                   Time
@@ -300,10 +318,13 @@ export default function RecordedSession() {
             <tbody>
               {sessions.map((session) => (
                 <tr key={session.id} className="border-b last:border-b-0">
-                  <td className="px-4 py-3 text-slate-800">{session.course}</td>
-                  <td className="px-4 py-3 text-slate-700">{session.title}</td>
+                  <td className="px-4 py-3 text-slate-800">{session.title}</td>
+                  <td className="px-4 py-3 text-slate-700">{session.description}</td>
                   <td className="px-4 py-3 text-slate-500">
-                    {session.duration}
+                   <p className="text-sm text-gray-600">
+  {convertTimestamp(session.createdAt)}
+</p>
+
                   </td>
 
                   <td className="px-4 py-3 text-right">
