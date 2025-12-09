@@ -24,10 +24,18 @@ export const getSessionMaterials = (id) =>
   client.get(`/api/student/live-session/${id}/materials`);
 
 // Recorded & Resources
-export const getRecordedSessionList = () =>
-  client.get("/api/student/recorded-sessions");
+// export const getRecordedSessionList = () =>
+//   client.get("/api/student/recorded-sessions");
+// export const downloadAllResourcess = () => client.get("/api/student/resources");
+// export const lessionBundles = () => client.get("/api/student/bundles");
+
+// ==========================================
+// RECORDED & RESOURCES
+// ==========================================
+export const getRecordedSessionList = () => client.get("/api/student/recorded-sessions");
+export const getRecordingDetails = (id) => client.get(`/api/student/recorded/${id}`);
+export const downloadRecording = (id) => client.get(`/api/student/recorded/${id}/download`);
 export const downloadAllResourcess = () => client.get("/api/student/resources");
-export const lessionBundles = () => client.get("/api/student/bundles");
 
 // Analytics
 export const getStudentAnalytics = (params) =>

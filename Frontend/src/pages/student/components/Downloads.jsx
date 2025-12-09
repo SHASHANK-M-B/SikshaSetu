@@ -1,99 +1,75 @@
 // components/Downloads.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Search, ChevronDown, Eye, CloudDownload } from "lucide-react";
-import { downloadAllResourcess, lessionBundles } from "@/api/student";
-import { all } from "axios";
-
-// Load downloads from local storage
-const loadDownloads = () => {
-  try {
-    return JSON.parse(localStorage.getItem("edu_downloads")) || [];
-  } catch {
-    return [];
-  }
-};
-
-// Format map
-const FORMAT_MAP = {
-  Notes: "PDF",
-  Assignments: "PDF",
-  "Sample QP": "PDF",
-  "External Links": "Link",
-  "Images/Diagrams": "Image",
-};
-
-// Dummy resources
-const DUMMY_RESOURCES = [
-  {
-    id: 1,
-    title: "Unit 1 Notes",
-    course: "CSE101",
-    category: "Notes",
-    downloadUrl:
-      "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-    createdAt: "2024-01-05",
-  },
-  {
-    id: 2,
-    title: "Assignment 1",
-    course: "CSE101",
-    category: "Assignments",
-    downloadUrl:
-      "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-    createdAt: "2024-01-03",
-  },
-  {
-    id: 3,
-    title: "Sample QP 2023",
-    course: "ENG201",
-    category: "Sample QP",
-    downloadUrl:
-      "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-    createdAt: "2024-02-10",
-  },
-];
+import { downloadAllResourcess } from "@/api/student";
 
 export default function Downloads() {
-  const [downloads, setDownloads] = useState(() => {
-    const saved = loadDownloads();
-    return saved.length === 0 ? DUMMY_RESOURCES : saved;
-  });
+  const [resources, setResources] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [notesOpen, setNotesOpen] = useState(false);
+
+  // Fetch Resources from API
+  const getAllResources = async () => {
+    try {
+      setLoading(true);
+      const response = await downloadAllResourcess();
+      // Backend returns { resources: [...] }
+      if (response.data && response.data.resources) {
+        setResources(response.data.resources);
+      }
+    } catch (error) {
+      console.error("Failed to fetch resources:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem("edu_downloads", JSON.stringify(downloads));
-  }, [downloads]);
+    getAllResources();
+  }, []);
 
-  const courseOptions = useMemo(
-    () => [...new Set(downloads.map((d) => d.course))],
-    [downloads]
-  );
-  const [allResources, setAllResources] = useState([]);
-  const dTime = (v) => (v ? new Date(v).getTime() : 0);
+  // Helper to safely get unique course names
+  const courseOptions = useMemo(() => {
+    const courses = resources.map((r) => r.course?.courseName).filter((c) => c);
+    return [...new Set(courses)];
+  }, [resources]);
 
+  // Helper to parse dates
+  const dTime = (v) => {
+    if (!v) return 0;
+    if (v._seconds) return v._seconds * 1000;
+    return new Date(v).getTime();
+  };
+
+  // Filter & Sort Logic
   const filtered = useMemo(() => {
-    let list = [...downloads];
+    let list = [...resources];
 
+    // 1. Search
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
         (d) =>
-          d.title.toLowerCase().includes(q) ||
-          d.course.toLowerCase().includes(q)
+          d.title?.toLowerCase().includes(q) ||
+          d.course?.courseName?.toLowerCase().includes(q)
       );
     }
 
-    if (courseFilter !== "all")
-      list = list.filter((d) => d.course === courseFilter);
+    // 2. Course Filter
+    if (courseFilter !== "all") {
+      list = list.filter((d) => d.course?.courseName === courseFilter);
+    }
 
-    if (categoryFilter !== "all")
-      list = list.filter((d) => d.category === categoryFilter);
+    // 3. Category Filter
+    if (categoryFilter !== "all") {
+      list = list.filter((d) => d.resourceType === categoryFilter);
+    }
 
+    // 4. Sorting
     list.sort((a, b) =>
       sortOrder === "newest"
         ? dTime(b.createdAt) - dTime(a.createdAt)
@@ -101,80 +77,45 @@ export default function Downloads() {
     );
 
     return list;
-  }, [downloads, search, courseFilter, categoryFilter, sortOrder]);
+  }, [resources, search, courseFilter, categoryFilter, sortOrder]);
 
   // -------------------------------------------------------
-  // ✅ DOWNLOAD + SAVE LOCAL FILE URL (no redirects)
+  // ✅ VIEW / OPEN FILE
   // -------------------------------------------------------
-  const handleDownload = async (item) => {
-    try {
-      const response = await fetch(item.downloadUrl);
-      const blob = await response.blob();
-
-      const localUrl = URL.createObjectURL(blob);
-
-      const updatedDownloads = downloads.map((d) =>
-        d.id === item.id ? { ...d, localUrl } : d
-      );
-
-      setDownloads(updatedDownloads);
-      localStorage.setItem("edu_downloads", JSON.stringify(updatedDownloads));
-
-      // Trigger actual download
-      const link = document.createElement("a");
-      link.href = localUrl;
-      link.download = item.title;
-      link.click();
-
-      alert("File downloaded! Now you can click VIEW to open it.");
-    } catch (e) {
-      console.error(e);
-      alert("Download failed");
+  const handleView = (item) => {
+    if (item.downloadUrl) {
+      window.open(item.downloadUrl, "_blank");
+    } else {
+      alert("File URL not available.");
     }
   };
 
   // -------------------------------------------------------
-  // ✅ VIEW ONLY LOCAL DOWNLOADED FILE
+  // ✅ DOWNLOAD FILE
   // -------------------------------------------------------
-  const handleView = (item) => {
-    if (item.localUrl) {
-      window.open(item.localUrl, "_blank");
-      return;
+  const handleDownload = (item) => {
+    // For cloud files, usually opening in a new tab triggers the browser's
+    // native handling (view or download depending on file type).
+    if (item.downloadUrl) {
+      window.open(item.downloadUrl, "_blank");
+    } else {
+      alert("Download URL not available.");
     }
-
-    alert("Please download the file first to view it.");
   };
 
   const CATEGORY_LIST = [
-    "Notes",
-    "Assignments",
-    "Sample QP",
-    "External Links",
-    "Images/Diagrams",
+    "PDF Notes",
+    "Assignment Sheets",
+    "Sample Question Papers",
+    "External Reference Links",
+    "Images (Diagrams)",
   ];
-
-  const getAllResources = async () => {
-    try {
-      const response = await downloadAllResourcess();
-      setAllResources(response.data.resources);
-    } catch (error) {}
-  };
-
-  const getLessionBundels = async () => {
-    try {
-      const response = await lessionBundles();
-      // setAllResources(response.data.resources);
-    } catch (error) {}
-  };
-
-  useEffect(() => {
-    getAllResources();
-    getLessionBundels();
-  }, []);
 
   return (
     <div className="min-h-screen w-full bg-gray-100 px-4 md:px-10 py-6">
-      <h1 className="text-3xl md:text-4xl font-semibold mb-8">Downloads</h1>
+      <h1 className="text-3xl md:text-4xl font-semibold mb-8">
+        Lesson Bundles
+      </h1>
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-5 mb-8">
@@ -184,7 +125,7 @@ export default function Downloads() {
             <Search size={18} className="text-gray-500" />
             <input
               className="bg-transparent w-full ml-2 outline-none text-sm"
-              placeholder="Search..."
+              placeholder="Search by title or course..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -200,12 +141,14 @@ export default function Downloads() {
               >
                 <option value="all">All courses</option>
                 {courseOptions.map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
               </select>
               <ChevronDown
                 size={16}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
+                className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
               />
             </div>
 
@@ -220,7 +163,7 @@ export default function Downloads() {
               </select>
               <ChevronDown
                 size={16}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
+                className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
               />
             </div>
           </div>
@@ -232,22 +175,22 @@ export default function Downloads() {
             <button
               key={cat}
               onClick={() => setCategoryFilter(cat)}
-              className={`px-4 py-2 rounded-lg border text-sm ${
+              className={`px-4 py-2 rounded-lg border text-sm transition ${
                 categoryFilter === cat
-                  ? "bg-indigo-600 text-white"
-                  : "hover:bg-gray-100"
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "hover:bg-gray-100 border-gray-200"
               }`}
             >
-              {cat} – {FORMAT_MAP[cat]}
+              {cat}
             </button>
           ))}
 
           <button
             onClick={() => setCategoryFilter("all")}
-            className={`px-4 py-2 rounded-lg border text-sm ${
+            className={`px-4 py-2 rounded-lg border text-sm transition ${
               categoryFilter === "all"
-                ? "bg-indigo-600 text-white"
-                : "hover:bg-gray-100"
+                ? "bg-indigo-600 text-white border-indigo-600"
+                : "hover:bg-gray-100 border-gray-200"
             }`}
           >
             All
@@ -271,18 +214,36 @@ export default function Downloads() {
           </thead>
 
           <tbody>
-            {Array.isArray(allResources) &&
-              allResources.map((item) => (
-                <tr key={item.id} className="border-b last:border-0">
-                  <td className="p-3">{item.title}</td>
-                  <td className="p-3">{item.course}</td>
-                  <td className="p-3">{item.resourceType}</td>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="text-center py-8 text-gray-400">
+                  Loading resources...
+                </td>
+              </tr>
+            ) : filtered.length > 0 ? (
+              filtered.map((item) => (
+                <tr
+                  key={item.resourceId}
+                  className="border-b last:border-0 hover:bg-gray-50 transition"
+                >
+                  <td className="p-3 font-medium text-gray-800">
+                    {item.title}
+                  </td>
+                  <td className="p-3 text-gray-600">
+                    {item.course ? item.course.courseName : "General"}
+                  </td>
+                  <td className="p-3">
+                    <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600">
+                      {item.resourceType}
+                    </span>
+                  </td>
 
                   {/* VIEW button */}
                   <td className="p-3">
                     <button
                       onClick={() => handleView(item)}
-                      className="p-2 rounded-lg bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center"
+                      className="p-2 rounded-lg bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition"
+                      title="View"
                     >
                       <Eye size={16} />
                     </button>
@@ -292,18 +253,18 @@ export default function Downloads() {
                   <td className="p-3">
                     <button
                       onClick={() => handleDownload(item)}
-                      className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center justify-center"
+                      className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center justify-center transition"
+                      title="Download / Open"
                     >
                       <CloudDownload size={18} />
                     </button>
                   </td>
                 </tr>
-              ))}
-
-            {allResources.length === 0 && (
+              ))
+            ) : (
               <tr>
                 <td colSpan={5} className="text-center py-8 text-gray-400">
-                  No resources found.
+                  No resources found matching your filters.
                 </td>
               </tr>
             )}

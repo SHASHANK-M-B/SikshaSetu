@@ -1,5 +1,9 @@
-import { getRecordedSessionList } from "@/api/student";
-import React, { useState, useMemo, useEffect } from "react";
+import {
+  getRecordedSessionList,
+  getRecordingDetails,
+  downloadRecording,
+} from "@/api/student";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   FiDownload,
   FiEye,
@@ -8,114 +12,163 @@ import {
   FiVolumeX,
   FiPause,
   FiPlay,
-  FiChevronLeft,
-  FiChevronRight,
 } from "react-icons/fi";
 
-const initialSessions = [
-  {
-    id: "rec_1",
-    course: "Python Essentials",
-    title: "Functions & Recursion - Recorded",
-    duration: "42 min",
-    downloaded: false,
-    slides: [
-      "https://via.placeholder.com/960x540?text=Python+Slide+1",
-      "https://via.placeholder.com/960x540?text=Python+Slide+2",
-      "https://via.placeholder.com/960x540?text=Python+Slide+3",
-    ],
-  },
-  {
-    id: "rec_2",
-    course: "React Masterclass",
-    title: "Hooks & State Management - Recorded",
-    duration: "35 min",
-    downloaded: false,
-    slides: [
-      "https://via.placeholder.com/960x540?text=React+Slide+1",
-      "https://via.placeholder.com/960x540?text=React+Slide+2",
-    ],
-  },
-  {
-    id: "rec_3",
-    course: "DBMS & SQL",
-    title: "Joins & Query Optimization - Recorded",
-    duration: "27 min",
-    downloaded: true,
-    slides: [
-      "https://via.placeholder.com/960x540?text=SQL+Slide+1",
-      "https://via.placeholder.com/960x540?text=SQL+Slide+2",
-      "https://via.placeholder.com/960x540?text=SQL+Slide+3",
-      "https://via.placeholder.com/960x540?text=SQL+Slide+4",
-    ],
-  },
-];
-
 export default function RecordedSession() {
-  const [sessions, setSessions] = useState(initialSessions);
+  const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [muted, setMuted] = useState(false);
   const [playing, setPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  // Ref for audio playback
+  const audioRef = useRef(new Audio());
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) || null,
     [sessions, activeSessionId]
   );
 
-  const handleDownload = (sessionId) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === sessionId ? { ...s, downloaded: true } : s))
-    );
-  };
-
-  const handleView = (sessionId) => {
-    setActiveSessionId(sessionId);
-    setCurrentSlideIndex(0);
-    setPlaying(true);
-    setProgress(0);
-  };
-
-  const handleBack = () => {
-    setActiveSessionId(null);
-    setPlaying(true);
-    setProgress(0);
-    setCurrentSlideIndex(0);
-  };
-
-  const handleStop = () => {};
+  // Fetch List of Sessions
   const getRecordedSessionLists = async () => {
     try {
       const response = await getRecordedSessionList();
-      setSessions(response.data.recordings);
-    } catch (error) {}
+      // Map backend data to frontend structure
+      // Backend returns: { contentId, course: { courseName }, title, duration, ... }
+      const mappedSessions = response.data.recordings.map((item) => ({
+        id: item.contentId,
+        course: item.course ? item.course.courseName : "Unknown Course",
+        title: item.title,
+        description: item.description,
+        duration: item.duration || "0 min",
+        createdAt: item.createdAt,
+        downloaded: false, // Default state
+        slides: [], // Will be fetched on view
+        audio: null, // Will be fetched on view
+      }));
+      setSessions(mappedSessions);
+    } catch (error) {
+      console.error("Failed to fetch recorded sessions:", error);
+    }
   };
 
   useEffect(() => {
     getRecordedSessionLists();
+
+    // Cleanup audio on unmount
+    return () => {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    };
   }, []);
 
+  // Handle Audio Playback Effect
+  useEffect(() => {
+    if (activeSession && activeSession.audio?.url) {
+      const audio = audioRef.current;
+
+      // Only set src if it's different to avoid reloading
+      if (audio.src !== activeSession.audio.url) {
+        audio.src = activeSession.audio.url;
+        audio.load();
+      }
+
+      audio.muted = muted;
+
+      if (playing) {
+        audio.play().catch((e) => console.log("Autoplay blocked:", e));
+      } else {
+        audio.pause();
+      }
+
+      // Update progress
+      const updateProgress = () => {
+        if (audio.duration) {
+          setProgress((audio.currentTime / audio.duration) * 100);
+        }
+      };
+
+      audio.addEventListener("timeupdate", updateProgress);
+      return () => audio.removeEventListener("timeupdate", updateProgress);
+    }
+  }, [activeSession, playing, muted]);
+
+  const handleDownload = async (sessionId) => {
+    try {
+      await downloadRecording(sessionId);
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, downloaded: true } : s))
+      );
+    } catch (error) {
+      console.error("Download failed:", error);
+    }
+  };
+
+  const handleView = async (sessionId) => {
+    setActiveSessionId(sessionId);
+    setCurrentSlideIndex(0);
+    setPlaying(true);
+    setProgress(0);
+    setLoadingDetails(true);
+
+    try {
+      // Fetch full details (slides, audio)
+      const response = await getRecordingDetails(sessionId);
+      const { slides, audio } = response.data;
+
+      // Update the specific session with detailed data
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId ? { ...s, slides: slides || [], audio: audio } : s
+        )
+      );
+    } catch (error) {
+      console.error("Failed to fetch session details:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const handleBack = () => {
+    setActiveSessionId(null);
+    setPlaying(false);
+    audioRef.current.pause();
+    setProgress(0);
+    setCurrentSlideIndex(0);
+  };
+
   const convertTimestamp = (timestamp) => {
-  if (!timestamp?._seconds) return "";
+    if (!timestamp?._seconds) return "";
+    const date = new Date(
+      timestamp._seconds * 1000 + timestamp._nanoseconds / 1e6
+    );
+    return date.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
-  const date = new Date(
-    timestamp._seconds * 1000 + timestamp._nanoseconds / 1e6
-  );
-
-  return date.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
+  // Seek handler
+  const handleSeek = (e) => {
+    const newVal = Number(e.target.value);
+    setProgress(newVal);
+    if (audioRef.current.duration) {
+      audioRef.current.currentTime = (newVal / 100) * audioRef.current.duration;
+    }
+  };
 
   if (activeSession) {
-    const currentSlide = activeSession.slides[currentSlideIndex] || null;
+    // Check if slides exist and get the URL. Backend returns objects { url: "..." }
+    const currentSlide = activeSession.slides?.[currentSlideIndex];
+    // If currentSlide is an object (backend), use .url. If string (dummy), use it directly.
+    const slideSrc =
+      typeof currentSlide === "object" ? currentSlide?.url : currentSlide;
 
     return (
       <div className="min-h-screen w-full bg-slate-100 flex flex-col">
@@ -145,10 +198,14 @@ export default function RecordedSession() {
         {/* DESKTOP PLAYER */}
         <main className="hidden md:flex flex-col items-center py-6 w-full">
           <div className="w-full max-w-5xl aspect-video rounded-2xl bg-slate-900 overflow-hidden relative">
-            {currentSlide ? (
+            {loadingDetails ? (
+              <div className="w-full h-full flex items-center justify-center text-slate-300">
+                Loading content...
+              </div>
+            ) : slideSrc ? (
               <img
-                src={currentSlide}
-                alt=""
+                src={slideSrc}
+                alt={`Slide ${currentSlideIndex + 1}`}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -196,7 +253,7 @@ export default function RecordedSession() {
                 min={0}
                 max={100}
                 value={progress}
-                onChange={(e) => setProgress(Number(e.target.value))}
+                onChange={handleSeek}
                 className="flex-1 accent-indigo-600"
               />
               <span className="text-[11px]">{Math.round(progress)}%</span>
@@ -204,7 +261,7 @@ export default function RecordedSession() {
           </div>
         </main>
 
-        {/* MOBILE */}
+        {/* MOBILE PLAYER */}
         <div className="md:hidden flex flex-col flex-1">
           <div className="px-4 pt-4 pb-2">
             <div className="text-xs uppercase text-slate-500">
@@ -220,9 +277,13 @@ export default function RecordedSession() {
           </div>
 
           <div className="relative w-full h-[50vh] bg-slate-900 overflow-hidden">
-            {currentSlide ? (
+            {loadingDetails ? (
+              <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs">
+                Loading...
+              </div>
+            ) : slideSrc ? (
               <img
-                src={currentSlide}
+                src={slideSrc}
                 alt=""
                 className="w-full h-full object-cover"
               />
@@ -265,7 +326,7 @@ export default function RecordedSession() {
                 min={0}
                 max={100}
                 value={progress}
-                onChange={(e) => setProgress(Number(e.target.value))}
+                onChange={handleSeek}
                 className="flex-1 accent-indigo-600"
               />
               <span className="text-[11px] text-slate-500 shrink-0">
@@ -287,6 +348,7 @@ export default function RecordedSession() {
     );
   }
 
+  // LIST VIEW
   return (
     <div className="min-h-screen w-full bg-slate-100 flex flex-col items-center px-4 py-8">
       <div className="w-full max-w-5xl">
@@ -319,19 +381,20 @@ export default function RecordedSession() {
               {sessions.map((session) => (
                 <tr key={session.id} className="border-b last:border-b-0">
                   <td className="px-4 py-3 text-slate-800">{session.title}</td>
-                  <td className="px-4 py-3 text-slate-700">{session.description}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {session.description}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">
-                   <p className="text-sm text-gray-600">
-  {convertTimestamp(session.createdAt)}
-</p>
-
+                    <p className="text-sm text-gray-600">
+                      {convertTimestamp(session.createdAt)}
+                    </p>
                   </td>
 
                   <td className="px-4 py-3 text-right">
                     {!session.downloaded ? (
                       <button
                         onClick={() => handleDownload(session.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-600 text-white"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-600 text-white transition hover:bg-indigo-700"
                       >
                         <FiDownload className="text-[13px]" />
                         Download
@@ -339,7 +402,7 @@ export default function RecordedSession() {
                     ) : (
                       <button
                         onClick={() => handleView(session.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-600 text-white"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-600 text-white transition hover:bg-emerald-700"
                       >
                         <FiEye className="text-[13px]" />
                         View
@@ -348,10 +411,21 @@ export default function RecordedSession() {
                   </td>
                 </tr>
               ))}
+              {sessions.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-4 py-6 text-center text-gray-500"
+                  >
+                    No recorded sessions available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
+        {/* Mobile List View */}
         <div className="md:hidden mt-6 flex flex-col gap-3">
           {sessions.map((session) => (
             <div
@@ -393,6 +467,11 @@ export default function RecordedSession() {
               </div>
             </div>
           ))}
+          {sessions.length === 0 && (
+            <div className="text-center text-gray-500 py-4">
+              No recorded sessions available.
+            </div>
+          )}
         </div>
       </div>
     </div>

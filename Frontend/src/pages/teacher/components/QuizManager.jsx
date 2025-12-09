@@ -237,7 +237,7 @@ export default function QuizManager() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
+              {/* <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Course ID
                 </label>
@@ -248,7 +248,7 @@ export default function QuizManager() {
                   value={quizData.courseId}
                   onChange={(e) => handleChange(e)}
                 />
-              </div>
+              </div> */}
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Time (mins)

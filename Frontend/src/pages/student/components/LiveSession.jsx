@@ -1,4 +1,4 @@
-// LiveSession.jsx
+// student/LiveSession.jsx
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -19,10 +19,15 @@ import {
   getSessionMaterials,
 } from "@/api/student";
 
-// --- DYNAMIC SOCKET URL ---
-const SOCKET_URL = "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
+// --- CONSTANTS AND UTILS ---
+// const SOCKET_URL =
+//   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
-const STUDENT_ID = "STUDENT_ID_HERE"; 
+  // Local
+  const SOCKET_URL =
+  "http://localhost:8928/live-session";
+
+const STUDENT_ID = "STUDENT_ID_HERE";
 const STUDENT_NAME = "Student Name";
 
 export default function LiveSession() {
@@ -158,10 +163,11 @@ export default function LiveSession() {
           teacherAudioRef.current.srcObject = event.streams[0];
           teacherAudioRef.current.play().catch((e) => {
             console.warn("Autoplay blocked, adding user click handler", e);
+            // Show explicit play button if browser blocks autoplay
             const playBtn = document.createElement("button");
             playBtn.textContent = "🔊 Click to Enable Audio";
             playBtn.style.cssText =
-              "position:fixed; top:20px; right:20px; z-index:9999; padding:15px; background:red; color:white; font-weight:bold; border-radius:10px;";
+              "position:fixed; top:20px; right:20px; z-index:9999; padding:15px; background:red; color:white; font-weight:bold; border-radius:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);";
             playBtn.onclick = () => {
               teacherAudioRef.current.play();
               playBtn.remove();
@@ -338,6 +344,19 @@ export default function LiveSession() {
       socketRef.current.emit("understood", {
         sessionId: activeClass.sessionId,
       });
+      // Visual feedback
+      const btn1 = document.getElementById("btn-understood");
+      const btn2 = document.getElementById("btn-understood-d");
+      [btn1, btn2].forEach((btn) => {
+        if (btn) {
+          btn.classList.add("bg-green-700", "scale-110", "text-white");
+          setTimeout(
+            () =>
+              btn.classList.remove("bg-green-700", "scale-110", "text-white"),
+            500
+          );
+        }
+      });
     }
   };
 
@@ -409,16 +428,24 @@ export default function LiveSession() {
         />
 
         {/* Top Bar */}
-        <div className="absolute top-0 left-0 right-0 p-4 bg-black/50 text-white z-20 flex justify-between">
-          <h2 className="font-bold">{activeClass?.sessionTitle}</h2>
+        <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent text-white z-20 flex justify-between items-start">
+          <div>
+            <h2 className="font-bold text-lg shadow-black drop-shadow-md">
+              {activeClass?.sessionTitle}
+            </h2>
+            <p className="text-xs opacity-90">
+              {activeClass?.course?.courseName}
+            </p>
+          </div>
           <button
             onClick={() => {
               setJoined(false);
               closePeerConnection();
+              stopMicrophone();
             }}
-            className="bg-red-600 px-4 py-1 rounded"
+            className="bg-red-600/90 hover:bg-red-600 px-4 py-1.5 rounded-lg text-sm font-semibold backdrop-blur-md"
           >
-            Leave
+            <FiArrowLeft className="inline mr-1" /> Leave
           </button>
         </div>
 
@@ -436,63 +463,185 @@ export default function LiveSession() {
               />
               <canvas
                 ref={canvasRef}
-                className="absolute top-0 left-0"
-                style={{ width: "100%", height: "100%" }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ width: "100%", maxHeight: "100%" }}
               />
             </>
           ) : (
             <h1 className="text-white opacity-50">Waiting for slides...</h1>
           )}
         </div>
+
+        {/* Mobile Bottom Controls */}
+        {isMobile && (
+          <div className="bg-white p-3 border-t flex justify-around items-center z-20">
+            <button
+              onClick={toggleMute}
+              className={`p-3 rounded-full transition ${
+                !isMuted ? "bg-indigo-100 text-indigo-600" : "bg-gray-100"
+              }`}
+            >
+              {isMuted ? <FiMicOff /> : <FiMic />}
+            </button>
+            <button
+              id="btn-understood"
+              onClick={handleUnderstood}
+              className="p-3 rounded-full bg-green-100 text-green-700 transition-transform"
+            >
+              <FiThumbsUp />
+            </button>
+            <button
+              onClick={() => setShowDownloadPopup(true)}
+              className="p-3 rounded-full bg-blue-100 text-blue-600"
+            >
+              <FiDownload />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* 2. CHAT & CONTROLS */}
-      <div className="w-full md:w-96 bg-white border-l flex flex-col h-full">
+      {/* 2. SIDEBAR */}
+      <div
+        className={`bg-white border-l w-full md:w-96 flex flex-col ${
+          isMobile ? "h-[40vh]" : "h-full"
+        }`}
+      >
+        <div className="p-4 border-b bg-gray-50 flex items-center gap-2 font-semibold text-gray-700">
+          <FiMessageSquare /> Live Chat
+        </div>
+
         <div
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4"
         >
-          {chatMessages.map((m, i) => (
-            <div
-              key={i}
-              className={`p-2 rounded ${
-                m.role === "teacher" ? "bg-indigo-50 ml-auto" : "bg-gray-100"
-              }`}
-            >
-              <span className="text-xs font-bold block">{m.userName}</span>
-              {m.message}
-            </div>
-          ))}
+          {chatMessages.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm mt-10">
+              Say hello to the class! 👋
+            </p>
+          ) : (
+            chatMessages.map((m, i) => (
+              <div
+                key={i}
+                className={`flex flex-col ${
+                  m.role === "student" && m.userId === STUDENT_ID
+                    ? "items-end"
+                    : "items-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-xl p-3 text-sm ${
+                    m.role === "teacher"
+                      ? "bg-indigo-50 text-indigo-900 border border-indigo-100"
+                      : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  <span className="text-xs font-bold block mb-1 opacity-70">
+                    {m.userName}
+                  </span>
+                  {m.message}
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
-        <div className="p-4 border-t space-y-2">
-          <div className="flex gap-2">
-            <button onClick={toggleMute} className="flex-1 p-2 border rounded">
-              {isMuted ? "Unmute" : "Mute"}
-            </button>
+        {/* Desktop/Large Controls */}
+        {!isMobile && (
+          <div className="p-4 bg-gray-50 border-t space-y-4">
+            <div className="flex justify-between gap-2">
+              <button
+                onClick={toggleMute}
+                className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition ${
+                  !isMuted
+                    ? "bg-red-100 text-red-600"
+                    : "bg-white border hover:bg-gray-50"
+                }`}
+              >
+                {isMuted ? (
+                  <>
+                    <FiMicOff /> Unmute
+                  </>
+                ) : (
+                  <>
+                    <FiMic /> Mute
+                  </>
+                )}
+              </button>
+
+              <button
+                id="btn-understood-d"
+                onClick={handleUnderstood}
+                className="flex-1 py-2 rounded-lg bg-green-100 text-green-700 font-medium hover:bg-green-200 transition flex items-center justify-center gap-2"
+              >
+                <FiThumbsUp /> Understood
+              </button>
+            </div>
+
             <button
-              onClick={handleUnderstood}
-              className="flex-1 p-2 bg-green-100 rounded"
+              onClick={() => setShowDownloadPopup(true)}
+              className="w-full py-2 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 text-sm font-medium flex items-center justify-center gap-2"
             >
-              Understood
+              <FiDownload /> Class Materials ({materials.length})
             </button>
           </div>
-          <div className="flex gap-2">
-            <input
-              value={msg}
-              onChange={(e) => setMsg(e.target.value)}
-              className="flex-1 border p-2 rounded"
-              placeholder="Type a message..."
-            />
+        )}
+
+        {/* Chat Input */}
+        <div className="p-3 border-t flex gap-2">
+          <input
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && sendMsg()}
+            placeholder="Type a doubt..."
+            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <button
+            onClick={sendMsg}
+            disabled={!msg.trim()}
+            className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <FiSend />
+          </button>
+        </div>
+      </div>
+
+      {showDownloadPopup && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl animate-in zoom-in-95">
+            <h3 className="text-lg font-bold mb-4">Class Materials</h3>
+            {materials.length === 0 ? (
+              <p className="text-gray-500 text-sm mb-6">
+                No materials uploaded by teacher yet.
+              </p>
+            ) : (
+              <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
+                {materials.map((mat, idx) => (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+                  >
+                    <span className="text-sm truncate max-w-[70%]">
+                      {mat.fileName || `File ${idx + 1}`}
+                    </span>
+                    <button
+                      onClick={() => downloadMaterial(mat.url, mat.fileName)}
+                      className="text-blue-600 hover:underline text-xs font-semibold"
+                    >
+                      Download
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <button
-              onClick={sendMsg}
-              className="bg-indigo-600 text-white p-2 rounded"
+              onClick={() => setShowDownloadPopup(false)}
+              className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700"
             >
-              Send
+              Close
             </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

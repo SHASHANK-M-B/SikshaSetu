@@ -1,72 +1,53 @@
-import { enrollToCourse, getAllCourses, joinedToCourses } from "@/api/student";
-import { getCourses } from "@/api/teacher";
-import React, { useEffect, useLayoutEffect, useState } from "react";
-import { FiPlayCircle, FiPlusCircle } from "react-icons/fi";
+import { enrollToCourse, getAllCourses } from "@/api/student";
+import React, { useEffect, useState } from "react";
+import { FiPlayCircle, FiPlusCircle, FiCheck } from "react-icons/fi";
 
 export default function ViewCourses() {
-  const availableCourses = [
-    { code: "PHY111", name: "Physics Fundamentals", instructor: "Dr. Rao" },
-    {
-      code: "CSE250",
-      name: "Web Development Basics",
-      instructor: "Prof. Lena",
-    },
-    { code: "BUS310", name: "Business Strategy", instructor: "Mr. Albert" },
-  ];
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [joinLoading, setJoinLoading] = useState(null); // Stores the ID of the course being joined
 
-  //   const initialJoined = [
-  //     {
-  //       code: "CSE101",
-  //       name: "Intro to Programming",
-  //       progress: 70,
-  //       instructor: "Dr. Sharma",
-  //     },
-  //     {
-  //       code: "ENG201",
-  //       name: "Communication Skills",
-  //       progress: 40,
-  //       instructor: "Prof. Kim",
-  //     },
-  //     {
-  //       code: "MATH202",
-  //       name: "Discrete Mathematics",
-  //       progress: 90,
-  //       instructor: "Dr. Anya",
-  //     },
-  //   ];
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      const response = await getAllCourses();
+      // Expecting backend to return { courses: [ {..., isEnrolled: true/false } ] }
+      if (response.data && response.data.courses) {
+        setCourses(response.data.courses);
+      }
+    } catch (error) {
+      console.error("Failed to fetch courses:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const [joinedCourses, setJoinedCourses] = useState([]);
-  const [joinLoading, setJoinLoading] = useState(false);
+  useEffect(() => {
+    fetchCourses();
+  }, []);
 
   const handleJoin = async (id) => {
-    setJoinLoading(true);
-    await enrollToCourse(id);
-    setJoinLoading(false);
-  };
-
-  const [courses, setCourses] = useState([]);
-  const getAllCourses = async () => {
-    const response = await getCourses();
-    setCourses(response.data.courses);
-
+    setJoinLoading(id);
     try {
-    } catch (error) {}
+      await enrollToCourse(id);
+
+      // Optimistically update the UI to reflect enrollment
+      setCourses((prevCourses) =>
+        prevCourses.map((course) =>
+          course.courseId === id ? { ...course, isEnrolled: true } : course
+        )
+      );
+    } catch (error) {
+      console.error("Failed to enroll:", error);
+    } finally {
+      setJoinLoading(false);
+    }
   };
 
-  useEffect(() => {
-    getAllCourses();
-  }, []);
-  const getListOfCourses = async () => {
-    try {
-      // const response = await getAllCourses();
-      const response = await joinedToCourses();
-      setJoinedCourses(response.data.courses);
-    } catch (error) {}
-  };
+  // Filter courses based on enrollment status
+  const joinedCourses = courses.filter((c) => c.isEnrolled);
+  const availableCourses = courses.filter((c) => !c.isEnrolled);
 
-  useEffect(() => {
-    getListOfCourses();
-  }, []);
   return (
     <div className="space-y-10">
       {/* AVAILABLE COURSES TO JOIN */}
@@ -78,30 +59,53 @@ export default function ViewCourses() {
           Courses shared by your teacher will appear here.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {courses.map((course) => (
-            <div
-              key={course.code}
-              className="p-6 rounded-2xl bg-white shadow-md border hover:shadow-xl hover:-translate-y-1 transition"
-            >
-              <h3 className="text-xl font-bold text-indigo-600">
-                {course.courseCode}
-              </h3>
-              <p className="text-lg font-semibold">{course.courseName}</p>
-              <p className="text-sm text-gray-500 mt-1">
-                {course.shortDescription}
-              </p>
-
-              <button
-                onClick={() => handleJoin(course.id)}
-                className="mt-4 w-full py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 flex items-center justify-center gap-2 cursor-pointer"
+        {loading ? (
+          <div className="p-10 text-center text-gray-500">
+            Loading courses...
+          </div>
+        ) : availableCourses.length === 0 ? (
+          <div className="p-6 bg-white rounded-2xl shadow border text-center text-gray-500">
+            No new courses available to join at the moment.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {availableCourses.map((course) => (
+              <div
+                key={course.courseId}
+                className="p-6 rounded-2xl bg-white shadow-md border hover:shadow-xl hover:-translate-y-1 transition flex flex-col justify-between"
               >
-                <FiPlusCircle className="text-lg" />{" "}
-                {joinLoading ? "Joining" : "Join Course"}
-              </button>
-            </div>
-          ))}
-        </div>
+                <div>
+                  <h3 className="text-xl font-bold text-indigo-600">
+                    {course.courseCode}
+                  </h3>
+                  <p className="text-lg font-semibold">{course.courseName}</p>
+                  <p className="text-sm text-gray-500 mt-1 line-clamp-3">
+                    {course.shortDescription}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => handleJoin(course.courseId)}
+                  disabled={joinLoading === course.courseId}
+                  className={`mt-4 w-full py-3 text-white rounded-xl font-semibold flex items-center justify-center gap-2 cursor-pointer transition
+                    ${
+                      joinLoading === course.courseId
+                        ? "bg-green-400"
+                        : "bg-green-600 hover:bg-green-700"
+                    }`}
+                >
+                  {joinLoading === course.courseId ? (
+                    "Joining..."
+                  ) : (
+                    <>
+                      <FiPlusCircle className="text-lg" /> Join Course
+                    </>
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* JOINED COURSES */}
@@ -113,31 +117,38 @@ export default function ViewCourses() {
           Continue learning from your joined courses.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-6">
-          {Array.isArray(joinedCourses) &&
-            joinedCourses.map((course) => (
+        {loading ? (
+          <div className="p-10 text-center text-gray-500">Loading...</div>
+        ) : joinedCourses.length === 0 ? (
+          <div className="mt-6 p-6 bg-gray-50 rounded-2xl border border-dashed border-gray-300 text-center text-gray-500">
+            You haven't joined any courses yet.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-6">
+            {joinedCourses.map((course) => (
               <div
-                key={course.code}
+                key={course.courseId}
                 className="p-6 rounded-2xl bg-white shadow-lg border hover:shadow-2xl hover:-translate-y-1 transition"
               >
                 <h3 className="text-xl font-bold text-indigo-600">
-                  {course.code}
+                  {course.courseCode}
                 </h3>
                 <p className="text-lg font-semibold">{course.courseName}</p>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-gray-500 mt-1 line-clamp-2">
                   {course.shortDescription}
                 </p>
 
                 <div className="mt-4">
                   <div className="flex justify-between text-sm font-medium">
                     <span>Progress</span>
-                    <span>{course.progress}%</span>
+                    {/* Dummy progress for now as backend doesn't return this yet */}
+                    <span>0%</span>
                   </div>
 
                   <div className="w-full bg-gray-200 h-2.5 rounded-full mt-1 overflow-hidden">
                     <div
                       className="bg-indigo-600 h-2.5 rounded-full transition-all"
-                      style={{ width: `${course.progress}%` }}
+                      style={{ width: `0%` }}
                     ></div>
                   </div>
                 </div>
@@ -147,7 +158,8 @@ export default function ViewCourses() {
                 </button>
               </div>
             ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
