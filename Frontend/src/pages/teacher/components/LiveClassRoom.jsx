@@ -17,6 +17,8 @@ import {
   FiMessageSquare,
   FiSend,
   FiMicOff,
+  FiRotateCcw, // Undo Icon
+  FiTrash2, // Clear Icon
 } from "react-icons/fi";
 import { io } from "socket.io-client";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
@@ -39,7 +41,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 const SOCKET_URL =
   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
-  // local
+  // Local
   // const SOCKET_URL =
   // "http://localhost:8928/live-session";
 
@@ -91,6 +93,10 @@ export default function LiveClassRoom() {
     color: "#FF0000",
     lineWidth: 5,
   });
+
+  // History for Undo
+  const strokesRef = useRef([]); // Stores all completed strokes
+  const currentStrokeRef = useRef([]); // Stores the stroke currently being drawn
 
   // --- INITIAL LOAD ---
   const fetchSessions = async () => {
@@ -292,6 +298,8 @@ export default function LiveClassRoom() {
     if (newIndex < 0 || newIndex >= slidesDeck.length) return;
     setSlideIndex(newIndex);
 
+    // Reset canvas and history on slide change
+    strokesRef.current = [];
     if (canvasContextRef.current) {
       canvasContextRef.current.clearRect(
         0,
@@ -311,6 +319,15 @@ export default function LiveClassRoom() {
   };
 
   // --- ANNOTATION DRAWING LOGIC (NORMALIZED) ---
+  const getNormalizedCoords = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || e.touches[0].clientX) - rect.left;
+    const y = (e.clientY || e.touches[0].clientY) - rect.top;
+    // Return percentage (0.0 to 1.0) instead of pixels
+    return { x: x / canvas.width, y: y / canvas.height };
+  };
+
   const drawLine = useCallback(
     ({ fromX, fromY, toX, toY, color, lineWidth }) => {
       const ctx = canvasContextRef.current;
@@ -322,7 +339,7 @@ export default function LiveClassRoom() {
       ctx.strokeStyle = color;
       ctx.lineWidth = lineWidth;
       ctx.beginPath();
-      // Use absolute pixels for local drawing
+      // Use absolute pixels for local drawing (Percent * Width)
       ctx.moveTo(fromX * w, fromY * h);
       ctx.lineTo(toX * w, toY * h);
       ctx.stroke();
@@ -331,36 +348,29 @@ export default function LiveClassRoom() {
     []
   );
 
-  const getCanvasCoords = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || e.touches[0].clientX) - rect.left;
-    const y = (e.clientY || e.touches[0].clientY) - rect.top;
-
-    // Return NORMALIZED coordinates (0.0 to 1.0)
-    return {
-      x: x / canvas.width,
-      y: y / canvas.height,
-    };
-  };
-
   const startDrawing = (e) => {
     if (!isLive) return;
-    // Prevent default to stop scrolling on touch
-    // e.preventDefault();
-    const { x, y } = getCanvasCoords(e);
+    const { x, y } = getNormalizedCoords(e);
     setIsDrawing(true);
     lastPointRef.current = { x, y };
+
+    // Start tracking new stroke
+    currentStrokeRef.current = [];
+    if (socketRef.current) {
+      socketRef.current.emit("start-stroke", {
+        sessionId: currentSession.sessionId,
+        slideIndex,
+      });
+    }
   };
 
   const drawing = (e) => {
     if (!isDrawing || !isLive) return;
-
-    const { x: newX, y: newY } = getCanvasCoords(e);
+    const { x: newX, y: newY } = getNormalizedCoords(e);
     const { x: lastX, y: lastY } = lastPointRef.current;
     const { color, lineWidth } = drawingSettings.current;
 
-    const drawingData = {
+    const segment = {
       fromX: lastX,
       fromY: lastY,
       toX: newX,
@@ -369,22 +379,67 @@ export default function LiveClassRoom() {
       lineWidth,
     };
 
-    // Draw locally
-    drawLine(drawingData);
+    drawLine(segment); // Draw locally
+    currentStrokeRef.current.push(segment); // Save to history
 
     // Emit normalized data
     socketRef.current.emit("draw-annotation", {
       sessionId: currentSession.sessionId,
       slideIndex,
-      data: drawingData,
+      data: segment,
     });
 
     lastPointRef.current = { x: newX, y: newY };
   };
 
   const stopDrawing = () => {
+    if (!isDrawing) return;
     setIsDrawing(false);
     lastPointRef.current = null;
+
+    // Save completed stroke
+    if (currentStrokeRef.current.length > 0) {
+      strokesRef.current.push([...currentStrokeRef.current]);
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit("end-stroke", {
+        sessionId: currentSession.sessionId,
+        slideIndex,
+      });
+    }
+  };
+
+  const handleUndo = () => {
+    if (strokesRef.current.length === 0) return;
+    strokesRef.current.pop(); // Remove last stroke
+
+    // Redraw everything
+    const ctx = canvasContextRef.current;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    strokesRef.current.forEach((stroke) => {
+      stroke.forEach((segment) => drawLine(segment));
+    });
+
+    if (socketRef.current) {
+      socketRef.current.emit("undo-annotation", {
+        sessionId: currentSession.sessionId,
+        slideIndex,
+      });
+    }
+  };
+
+  const handleClearCanvas = () => {
+    strokesRef.current = [];
+    const ctx = canvasContextRef.current;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+    if (socketRef.current) {
+      socketRef.current.emit("clear-canvas", {
+        sessionId: currentSession.sessionId,
+        slideIndex,
+      });
+    }
   };
 
   const handleSendChat = (e) => {
@@ -725,7 +780,7 @@ export default function LiveClassRoom() {
       {(mode === "prep" || mode === "live") && currentSession && (
         <div className="w-full max-w-7xl flex flex-col lg:flex-row gap-6">
           <div className="flex-1 space-y-4">
-            <div className="bg-black/5 rounded-2xl p-2 border border-gray-200 min-h-[500px] flex flex-col justify-center items-center relative overflow-hidden">
+            <div className="bg-black/5 rounded-2xl p-2 border border-gray-200 min-h-[500px] flex flex-col justify-center items-center relative overflow-hidden group">
               {slidesDeck.length > 0 ? (
                 <div className="relative w-full h-full flex justify-center items-center">
                   <img
@@ -749,6 +804,23 @@ export default function LiveClassRoom() {
                     onTouchMove={drawing}
                     onTouchEnd={stopDrawing}
                   />
+                  {/* UNDO / CLEAR BUTTONS (Shows on Hover) */}
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-2 rounded-lg shadow-lg flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={handleUndo}
+                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-700"
+                      title="Undo Last Stroke"
+                    >
+                      <FiRotateCcw size={20} />
+                    </button>
+                    <button
+                      onClick={handleClearCanvas}
+                      className="p-2 hover:bg-red-50 rounded-lg text-red-600"
+                      title="Clear Canvas"
+                    >
+                      <FiTrash2 size={20} />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center text-gray-400">

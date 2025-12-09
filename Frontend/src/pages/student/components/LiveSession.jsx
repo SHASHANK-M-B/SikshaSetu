@@ -22,7 +22,7 @@ import {
 const SOCKET_URL =
   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
-  // local
+  // Local
   // const SOCKET_URL =
   // "http://localhost:8928/live-session";
 
@@ -58,6 +58,10 @@ export default function LiveSession() {
   const canvasContextRef = useRef(null);
   const viewportContainerRef = useRef(null);
 
+  // History for Undo (Synced with teacher)
+  const strokesRef = useRef([]); // [ [segment, segment], ... ]
+  const currentStrokeRef = useRef([]);
+
   const isMobile = window.innerWidth < 768;
 
   // --- FETCH SESSIONS ---
@@ -91,6 +95,8 @@ export default function LiveSession() {
 
       const ctx = canvasRef.current.getContext("2d");
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
       canvasContextRef.current = ctx;
     }
   }, []);
@@ -102,6 +108,36 @@ export default function LiveSession() {
       return () => window.removeEventListener("resize", resizeCanvas);
     }
   }, [joined, resizeCanvas]);
+
+  // --- DRAWING HELPER ---
+  const drawSegment = (segment) => {
+    const ctx = canvasContextRef.current;
+    if (!ctx) return;
+    const w = canvasRef.current.width;
+    const h = canvasRef.current.height;
+
+    ctx.strokeStyle = segment.color;
+    ctx.lineWidth = segment.lineWidth;
+    ctx.beginPath();
+    // Scale normalized 0-1 coords to local pixel size
+    ctx.moveTo(segment.fromX * w, segment.fromY * h);
+    ctx.lineTo(segment.toX * w, segment.toY * h);
+    ctx.stroke();
+    ctx.closePath();
+  };
+
+  const redrawCanvas = () => {
+    const ctx = canvasContextRef.current;
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+    // Draw all history
+    strokesRef.current.forEach((stroke) => {
+      stroke.forEach((seg) => drawSegment(seg));
+    });
+    // Draw current active stroke
+    currentStrokeRef.current.forEach((seg) => drawSegment(seg));
+  };
 
   // --- AUDIO LOGIC ---
   const startMicrophone = async () => {
@@ -128,29 +164,6 @@ export default function LiveSession() {
     else stopMicrophone();
   };
 
-  // --- DRAWING (NORMALIZED) ---
-  // Teacher sends coordinates as 0.0-1.0 percentages.
-  // We multiply by our local canvas size to draw correctly.
-  const drawLine = useCallback(
-    ({ fromX, fromY, toX, toY, color, lineWidth }) => {
-      const ctx = canvasContextRef.current;
-      if (!ctx) return;
-
-      const w = canvasRef.current.width;
-      const h = canvasRef.current.height;
-
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
-      ctx.beginPath();
-      // Multiply normalized coords by local width/height
-      ctx.moveTo(fromX * w, fromY * h);
-      ctx.lineTo(toX * w, toY * h);
-      ctx.stroke();
-      ctx.closePath();
-    },
-    []
-  );
-
   // --- WEBRTC LOGIC ---
   const createPeerConnection = useCallback(
     async (teacherSocketId) => {
@@ -169,16 +182,9 @@ export default function LiveSession() {
           teacherAudioRef.current.srcObject = event.streams[0];
           teacherAudioRef.current.play().catch((e) => {
             console.warn("Autoplay blocked, adding user click handler", e);
-            // Show explicit play button if browser blocks autoplay
-            const playBtn = document.createElement("button");
-            playBtn.textContent = "🔊 Click to Enable Audio";
-            playBtn.style.cssText =
-              "position:fixed; top:20px; right:20px; z-index:9999; padding:15px; background:red; color:white; font-weight:bold; border-radius:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);";
-            playBtn.onclick = () => {
-              teacherAudioRef.current.play();
-              playBtn.remove();
-            };
-            document.body.appendChild(playBtn);
+            // Show explicit play button if browser blocks autoplay (Mobile Fix)
+            const btn = document.getElementById("audio-force-btn");
+            if (btn) btn.style.display = "block";
           });
         }
       };
@@ -246,27 +252,17 @@ export default function LiveSession() {
 
       socket.on("change-slide", (data) => {
         if (data.slideImage) setCurrentSlideImage(data.slideImage);
-        if (canvasContextRef.current) {
-          canvasContextRef.current.clearRect(
-            0,
-            0,
-            canvasRef.current.width,
-            canvasRef.current.height
-          );
-        }
+        // Clear strokes on slide change
+        strokesRef.current = [];
+        currentStrokeRef.current = [];
+        redrawCanvas();
       });
 
       socket.on("slide-changed", (data) => {
-        console.log("Slide changed:", data);
         setCurrentSlideImage(data.slideImage);
-        if (canvasContextRef.current) {
-          canvasContextRef.current.clearRect(
-            0,
-            0,
-            canvasRef.current.width,
-            canvasRef.current.height
-          );
-        }
+        strokesRef.current = [];
+        currentStrokeRef.current = [];
+        redrawCanvas();
       });
 
       socket.on("new-material", (material) => {
@@ -274,17 +270,41 @@ export default function LiveSession() {
         alert("New material uploaded!");
       });
 
+      // --- ANNOTATION SYNC ---
+      socket.on("start-stroke", () => {
+        currentStrokeRef.current = [];
+      });
+
+      socket.on("annotation-draw", (data) => {
+        drawSegment(data.data); // Draw immediately
+        currentStrokeRef.current.push(data.data); // Add to current stroke
+      });
+
+      socket.on("end-stroke", () => {
+        if (currentStrokeRef.current.length > 0) {
+          strokesRef.current.push([...currentStrokeRef.current]);
+          currentStrokeRef.current = [];
+        }
+      });
+
+      socket.on("undo-annotation", () => {
+        strokesRef.current.pop();
+        redrawCanvas();
+      });
+
+      socket.on("clear-canvas", () => {
+        strokesRef.current = [];
+        currentStrokeRef.current = [];
+        redrawCanvas();
+      });
+
       // WebRTC Offer
       socket.on("webrtc-offer", async ({ offer, fromSocketId }) => {
         console.log("Received WebRTC Offer from teacher");
         const pc = await createPeerConnection(fromSocketId);
-
-        // FIX: Remove .sdp, pass full object
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-
         socket.emit("webrtc-answer", {
           sessionId: activeClass.sessionId,
           answer: pc.localDescription,
@@ -297,15 +317,13 @@ export default function LiveSession() {
         if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
       });
 
-      socket.on("annotation-draw", (data) => drawLine(data.data));
-
       return () => {
         if (socket) socket.disconnect();
         closePeerConnection();
         stopMicrophone();
       };
     }
-  }, [joined, activeClass, createPeerConnection, drawLine]);
+  }, [joined, activeClass, createPeerConnection]);
 
   // --- HANDLERS ---
   const handleJoinSession = async (session) => {
@@ -326,22 +344,38 @@ export default function LiveSession() {
       setJoined(true); // Triggers the socket useEffect
 
       setTimeout(resizeCanvas, 100);
+
+      // AUDIO HACK FOR MOBILE
+      if (isMobile) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          osc.connect(ctx.destination);
+          osc.start(0);
+          osc.stop(0.001);
+        }
+      }
     } catch (error) {
       console.error("Join failed", error);
       alert("Failed to join session.");
     }
   };
 
+  const handleManualAudioStart = () => {
+    if (teacherAudioRef.current) {
+      teacherAudioRef.current.play();
+      const btn = document.getElementById("audio-force-btn");
+      if (btn) btn.style.display = "none";
+    }
+  };
+
   const sendMsg = async () => {
     if (!msg.trim() || !activeClass || !socketRef.current) return;
-
-    // 1. Send via Socket (Backend handles saving)
     socketRef.current.emit("send-chat-message", {
       sessionId: activeClass.sessionId,
       message: msg,
     });
-
-    // 2. Clear input (Removed the failing API call)
     setMsg("");
   };
 
@@ -350,7 +384,6 @@ export default function LiveSession() {
       socketRef.current.emit("understood", {
         sessionId: activeClass.sessionId,
       });
-      // Visual feedback
       const btn1 = document.getElementById("btn-understood");
       const btn2 = document.getElementById("btn-understood-d");
       [btn1, btn2].forEach((btn) => {
@@ -432,6 +465,16 @@ export default function LiveSession() {
           controls={false}
           style={{ width: 0, height: 0, opacity: 0 }}
         />
+
+        {/* Force Audio Button (Hidden by default) */}
+        <button
+          id="audio-force-btn"
+          onClick={handleManualAudioStart}
+          style={{ display: "none" }}
+          className="fixed top-20 right-4 z-50 bg-red-600 text-white px-4 py-2 rounded-full shadow-lg font-bold animate-bounce"
+        >
+          🔊 Tap to Hear Audio
+        </button>
 
         {/* Top Bar */}
         <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent text-white z-20 flex justify-between items-start">
