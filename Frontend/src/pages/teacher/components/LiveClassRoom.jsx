@@ -1,4 +1,4 @@
-// LiveClassRoom.jsx
+// teacher/LiveClassRoom.jsx
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -35,10 +35,11 @@ import {
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 // --- CONSTANTS AND UTILS ---
+// Hardcoded for Production Deployment
 const SOCKET_URL =
   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
-  // Local
+  // local
   // const SOCKET_URL =
   // "http://localhost:8928/live-session";
 
@@ -78,8 +79,8 @@ export default function LiveClassRoom() {
 
   // --- REFS ---
   const socketRef = useRef(null);
-  const mediaStreamRef = useRef(null); // Local audio stream
-  const peerConnectionsRef = useRef(new Map()); // Map of {socketId: RTCPeerConnection}
+  const mediaStreamRef = useRef(null);
+  const peerConnectionsRef = useRef(new Map());
   const canvasRef = useRef(null);
   const canvasContextRef = useRef(null);
 
@@ -108,16 +109,17 @@ export default function LiveClassRoom() {
   // --- CANVAS SETUP ---
   useEffect(() => {
     if (canvasRef.current) {
+      // Set canvas size to match visual size for sharp drawing
+      const parent = canvasRef.current.parentElement;
+      canvasRef.current.width = parent.clientWidth;
+      canvasRef.current.height = parent.clientHeight;
+
       canvasContextRef.current = canvasRef.current.getContext("2d");
       const ctx = canvasContextRef.current;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.lineWidth = drawingSettings.current.lineWidth;
       ctx.strokeStyle = drawingSettings.current.color;
-
-      const parent = canvasRef.current.parentElement;
-      canvasRef.current.width = parent.clientWidth - 8;
-      canvasRef.current.height = parent.clientHeight - 8;
     }
   }, [mode, slidesDeck, slideIndex]);
 
@@ -156,21 +158,19 @@ export default function LiveClassRoom() {
         handleIceCandidate(event.candidate, studentSocketId);
       };
 
-      // Add local audio stream if available
       if (mediaStreamRef.current) {
         mediaStreamRef.current
           .getTracks()
           .forEach((track) => pc.addTrack(track, mediaStreamRef.current));
       }
 
-      // Set connection in map using studentSocketId
       peerConnectionsRef.current.set(studentSocketId, pc);
       return pc;
     },
     [handleIceCandidate]
   );
 
-  // --- CORE SOCKET CONNECTION AND EVENT HANDLERS ---
+  // --- CORE SOCKET CONNECTION ---
   useEffect(() => {
     if ((mode === "prep" || mode === "live") && currentSession) {
       socketRef.current = io(SOCKET_URL, {
@@ -189,7 +189,6 @@ export default function LiveClassRoom() {
         });
       });
 
-      // 1. Real-time Listeners
       socket.on("chat-message", (msg) => {
         setChatMessages((prev) => [...prev, msg]);
       });
@@ -201,19 +200,12 @@ export default function LiveClassRoom() {
         }));
       });
 
-      // 2. WebRTC Signaling Listeners
-
-      // NEW: Listener for student stream request (request-teacher-stream)
       socket.on("student-requesting-stream", async ({ studentSocketId }) => {
-        console.log(`Received stream request from student: ${studentSocketId}`);
-        // Only start PC if teacher is already live
         if (!isLive) return;
-
         const pc = createPeerConnection(studentSocketId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // NOTE: Server expects 'webrtc-offer' with targetSocketId
         socket.emit("webrtc-offer", {
           sessionId: currentSession.sessionId,
           offer: pc.localDescription,
@@ -221,27 +213,13 @@ export default function LiveClassRoom() {
         });
       });
 
-      // Handle answer back from student
-      // socket.on("webrtc-answer", async ({ answer, fromSocketId }) => {
-      //   console.log(`Received answer from ${fromSocketId}`);
-      //   const pc = peerConnectionsRef.current.get(fromSocketId);
-      //   if (pc) {
-      //     await pc.setRemoteDescription(new RTCSessionDescription(answer.sdp));
-      //   }
-      // });
-
-      // LiveClassRoom.jsx
-
-      socket.on('webrtc-answer', async ({ answer, fromSocketId }) => {
-        console.log(`Received answer from ${fromSocketId}`);
+      socket.on("webrtc-answer", async ({ answer, fromSocketId }) => {
         const pc = peerConnectionsRef.current.get(fromSocketId);
         if (pc) {
-          // FIX: Pass the entire 'answer' object, not just 'answer.sdp'
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
         }
       });
 
-      // Handle student ICE candidates
       socket.on("webrtc-ice-candidate", async ({ candidate, fromSocketId }) => {
         const pc = peerConnectionsRef.current.get(fromSocketId);
         if (pc) {
@@ -259,18 +237,43 @@ export default function LiveClassRoom() {
   }, [mode, currentSession, isLive, createPeerConnection]);
 
   // --- MICROPHONE LOGIC ---
-  // const startMicrophone = async () => {
-  //   try {
-  //     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  //     mediaStreamRef.current = stream;
-  //     setIsMuted(false);
-  //     console.log("Microphone started");
-  //   } catch (error) {
-  //     console.error("Error accessing microphone:", error);
-  //     alert("Could not access microphone. Please check permissions.");
-  //     setIsMuted(true);
-  //   }
-  // };
+  const startMicrophone = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      setIsMuted(false);
+
+      peerConnectionsRef.current.forEach(async (pc, studentSocketId) => {
+        stream.getTracks().forEach((track) => {
+          const senders = pc.getSenders();
+          const alreadyHasTrack = senders.some(
+            (sender) => sender.track === track
+          );
+          if (!alreadyHasTrack) {
+            pc.addTrack(track, stream);
+          }
+        });
+
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          if (socketRef.current) {
+            socketRef.current.emit("webrtc-offer", {
+              sessionId: currentSession.sessionId,
+              offer: pc.localDescription,
+              targetSocketId: studentSocketId,
+            });
+          }
+        } catch (err) {
+          console.error("Renegotiation failed:", err);
+        }
+      });
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      alert("Could not access microphone.");
+      setIsMuted(true);
+    }
+  };
 
   const stopMicrophone = () => {
     if (mediaStreamRef.current) {
@@ -281,33 +284,9 @@ export default function LiveClassRoom() {
   };
 
   const toggleMute = () => {
-    if (isMuted) {
-      startMicrophone();
-    } else {
-      stopMicrophone();
-    }
+    if (isMuted) startMicrophone();
+    else stopMicrophone();
   };
-
-  // --- SLIDE NAVIGATION & SYNC ---
-  // const changeSlide = (newIndex) => {
-  //   if (newIndex < 0 || newIndex >= slidesDeck.length) return;
-  //   setSlideIndex(newIndex);
-
-  //   // Clear canvas when slide changes
-  //   if (canvasContextRef.current) {
-  //       canvasContextRef.current.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-  //   }
-
-  //   // Emit slide change to students
-  //   if (socketRef.current && isLive) {
-  //     // CRITICAL CHANGE: Sending the image data URL
-  //     socketRef.current.emit("change-slide", {
-  //       sessionId: currentSession.sessionId,
-  //       slideIndex: newIndex,
-  //       slideImage: slidesDeck[newIndex].imageUrl // <-- ADDED IMAGE DATA URL
-  //     });
-  //   }
-  // };
 
   const changeSlide = (newIndex) => {
     if (newIndex < 0 || newIndex >= slidesDeck.length) return;
@@ -326,22 +305,26 @@ export default function LiveClassRoom() {
       socketRef.current.emit("change-slide", {
         sessionId: currentSession.sessionId,
         slideIndex: newIndex,
-        slideImage: slidesDeck[newIndex].imageUrl, // ADD THIS LINE
+        slideImage: slidesDeck[newIndex].imageUrl,
       });
     }
   };
 
-  // --- ANNOTATION DRAWING LOGIC ---
+  // --- ANNOTATION DRAWING LOGIC (NORMALIZED) ---
   const drawLine = useCallback(
     ({ fromX, fromY, toX, toY, color, lineWidth }) => {
       const ctx = canvasContextRef.current;
       if (!ctx) return;
 
+      const w = canvasRef.current.width;
+      const h = canvasRef.current.height;
+
       ctx.strokeStyle = color;
       ctx.lineWidth = lineWidth;
       ctx.beginPath();
-      ctx.moveTo(fromX, fromY);
-      ctx.lineTo(toX, toY);
+      // Use absolute pixels for local drawing
+      ctx.moveTo(fromX * w, fromY * h);
+      ctx.lineTo(toX * w, toY * h);
       ctx.stroke();
       ctx.closePath();
     },
@@ -353,11 +336,18 @@ export default function LiveClassRoom() {
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX || e.touches[0].clientX) - rect.left;
     const y = (e.clientY || e.touches[0].clientY) - rect.top;
-    return { x, y };
+
+    // Return NORMALIZED coordinates (0.0 to 1.0)
+    return {
+      x: x / canvas.width,
+      y: y / canvas.height,
+    };
   };
 
   const startDrawing = (e) => {
     if (!isLive) return;
+    // Prevent default to stop scrolling on touch
+    // e.preventDefault();
     const { x, y } = getCanvasCoords(e);
     setIsDrawing(true);
     lastPointRef.current = { x, y };
@@ -379,8 +369,10 @@ export default function LiveClassRoom() {
       lineWidth,
     };
 
+    // Draw locally
     drawLine(drawingData);
 
+    // Emit normalized data
     socketRef.current.emit("draw-annotation", {
       sessionId: currentSession.sessionId,
       slideIndex,
@@ -395,29 +387,22 @@ export default function LiveClassRoom() {
     lastPointRef.current = null;
   };
 
-  // --- CHAT LOGIC ---
   const handleSendChat = (e) => {
     e.preventDefault();
     if (!chatInput.trim() || !socketRef.current) return;
-
-    // Send chat via socket
     socketRef.current.emit("send-chat-message", {
       sessionId: currentSession.sessionId,
       message: chatInput,
     });
-
     setChatInput("");
   };
 
-  // --- HANDLERS ---
+  // --- API HANDLERS ---
   const handleScheduleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await scheduleLiveClass({
-        ...formData,
-        courseId: null,
-      });
+      await scheduleLiveClass({ ...formData, courseId: null });
       alert("Class scheduled successfully!");
       setMode("list");
       fetchSessions();
@@ -451,78 +436,6 @@ export default function LiveClassRoom() {
     setMode("prep");
   };
 
-  // const startMicrophone = async () => {
-  //   try {
-  //     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  //     mediaStreamRef.current = stream;
-  //     setIsMuted(false);
-
-  //     // ADD: Add tracks to existing connections
-  //     peerConnectionsRef.current.forEach((pc) => {
-  //       stream.getTracks().forEach((track) => {
-  //         pc.addTrack(track, stream);
-  //       });
-  //     });
-
-  //     console.log("Microphone started");
-  //   } catch (error) {
-  //     console.error("Error accessing microphone:", error);
-  //     alert("Could not access microphone. Please check permissions.");
-  //     setIsMuted(true);
-  //   }
-  // };
-
-  // ... inside LiveClassRoom component ...
-
-  const startMicrophone = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      setIsMuted(false);
-      
-      // Iterate over all connected students
-      // peerConnectionsRef is a Map: key=studentSocketId, value=RTCPeerConnection
-      peerConnectionsRef.current.forEach(async (pc, studentSocketId) => {
-        
-        // 1. Add the new audio tracks to the existing connection
-        stream.getTracks().forEach(track => {
-          // Check if track is already added to prevent errors
-          const senders = pc.getSenders();
-          const alreadyHasTrack = senders.some(sender => sender.track === track);
-          
-          if (!alreadyHasTrack) {
-            pc.addTrack(track, stream);
-          }
-        });
-
-        // 2. CRITICAL FIX: Renegotiate! 
-        // We must create a new offer to tell the student "Hey, I have audio now"
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-
-          // Emit the new offer to the specific student
-          if (socketRef.current) {
-            socketRef.current.emit('webrtc-offer', {
-              sessionId: currentSession.sessionId,
-              offer: pc.localDescription,
-              targetSocketId: studentSocketId
-            });
-          }
-        } catch (err) {
-          console.error("Renegotiation failed for student:", studentSocketId, err);
-        }
-      });
-      
-      console.log("Microphone started and connections renegotiated");
-    } catch (error) {
-      console.error("Error accessing microphone:", error);
-      alert("Could not access microphone. Please check permissions.");
-      setIsMuted(true);
-    }
-  };
-
-// ... rest of the component
   const handleStartLive = async () => {
     if (slidesDeck.length === 0) {
       alert("Please upload slides (PDF) before starting the session.");
@@ -530,14 +443,10 @@ export default function LiveClassRoom() {
     }
     try {
       setLoading(true);
-
-      await startMicrophone(); // MOVE THIS BEFORE startLiveSession
-
+      await startMicrophone();
       await startLiveSession(currentSession.sessionId);
-
       setIsLive(true);
       setMode("live");
-
       if (slidesDeck.length > 0) {
         socketRef.current.emit("change-slide", {
           sessionId: currentSession.sessionId,
@@ -558,13 +467,10 @@ export default function LiveClassRoom() {
     try {
       setLoading(true);
       await endLiveSession(currentSession.sessionId);
-
       stopMicrophone();
       setIsLive(false);
-
       peerConnectionsRef.current.forEach((pc) => pc.close());
       peerConnectionsRef.current.clear();
-
       setMode("list");
       fetchSessions();
     } catch (error) {
@@ -593,24 +499,22 @@ export default function LiveClassRoom() {
         currentSession.sessionId,
         formData
       );
-      // NOTE: Assuming uploadSessionMaterial returns { data: { url: '...' } }
       uploadedMaterialUrl = uploadRes.data.url;
     } catch (error) {
       console.error("Upload failed", error);
-      alert("Failed to upload material to server");
+      alert("Failed to upload material");
     } finally {
       setUploading(false);
     }
 
-    // Send the server a notification that a new slide deck is available
     if (socketRef.current && uploadedMaterialUrl) {
       socketRef.current.emit("slide-uploaded", {
         sessionId: currentSession.sessionId,
-        slideUrl: uploadedMaterialUrl, // Notify students of the material URL
+        slideUrl: uploadedMaterialUrl,
         slideIndex: 0,
       });
     }
-    e.target.value = null; // Clear input
+    e.target.value = null;
   };
 
   const renderPdfLocally = async (file) => {
@@ -639,12 +543,9 @@ export default function LiveClassRoom() {
       }
       setSlidesDeck(slides);
       setSlideIndex(0);
-
       URL.revokeObjectURL(url);
 
-      // Sync first slide immediately if live
       if (isLive && socketRef.current && slides.length > 0) {
-        // CRITICAL CHANGE: Sending the image data URL
         socketRef.current.emit("change-slide", {
           sessionId: currentSession.sessionId,
           slideIndex: 0,
@@ -671,7 +572,6 @@ export default function LiveClassRoom() {
             </p>
           </div>
         </div>
-
         {mode !== "list" && (
           <button
             onClick={() => {
@@ -696,7 +596,6 @@ export default function LiveClassRoom() {
               + Schedule New Class
             </button>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sessions.map((session) => (
               <div
@@ -723,14 +622,12 @@ export default function LiveClassRoom() {
                     </div>
                   </div>
                 </div>
-
                 <h3 className="font-bold text-lg mb-1">
                   {session.sessionTitle}
                 </h3>
                 <p className="text-sm text-gray-500 mb-4 line-clamp-2">
                   {session.shortDescription}
                 </p>
-
                 <button
                   onClick={() => handleEnterSession(session)}
                   className="w-full py-2.5 rounded-xl bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100 transition"
@@ -760,22 +657,18 @@ export default function LiveClassRoom() {
                 }
               />
             </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Heading / Topic
-                </label>
-                <input
-                  className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-black"
-                  value={formData.sessionHeading}
-                  onChange={(e) =>
-                    setFormData({ ...formData, sessionHeading: e.target.value })
-                  }
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Heading / Topic
+              </label>
+              <input
+                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-black"
+                value={formData.sessionHeading}
+                onChange={(e) =>
+                  setFormData({ ...formData, sessionHeading: e.target.value })
+                }
+              />
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -806,7 +699,6 @@ export default function LiveClassRoom() {
                 />
               </div>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Description
@@ -819,7 +711,6 @@ export default function LiveClassRoom() {
                 }
               />
             </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -834,9 +725,7 @@ export default function LiveClassRoom() {
       {(mode === "prep" || mode === "live") && currentSession && (
         <div className="w-full max-w-7xl flex flex-col lg:flex-row gap-6">
           <div className="flex-1 space-y-4">
-            {/* Viewport for Slides and Annotation */}
             <div className="bg-black/5 rounded-2xl p-2 border border-gray-200 min-h-[500px] flex flex-col justify-center items-center relative overflow-hidden">
-              {/* Slide Content */}
               {slidesDeck.length > 0 ? (
                 <div className="relative w-full h-full flex justify-center items-center">
                   <img
@@ -844,7 +733,6 @@ export default function LiveClassRoom() {
                     className="max-h-[500px] max-w-full object-contain shadow-2xl rounded-lg"
                     alt="Slide"
                   />
-                  {/* Annotation Canvas Overlay */}
                   <canvas
                     ref={canvasRef}
                     className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
@@ -869,8 +757,6 @@ export default function LiveClassRoom() {
                   <p className="text-sm">Upload a PDF to begin presentation.</p>
                 </div>
               )}
-
-              {/* Slide Controls */}
               {slidesDeck.length > 0 && (
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4 bg-black/70 p-2 rounded-full backdrop-blur-md z-10">
                   <button
@@ -896,11 +782,10 @@ export default function LiveClassRoom() {
               )}
             </div>
 
-            {/* Controls Bar */}
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-wrap gap-4 items-center justify-between">
               <div className="flex items-center gap-4">
                 <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700 transition">
-                  <FiUpload />
+                  <FiUpload />{" "}
                   {uploading ? "Uploading..." : "Upload Slides (PDF)"}
                   <input
                     type="file"
@@ -911,7 +796,6 @@ export default function LiveClassRoom() {
                   />
                 </label>
               </div>
-
               <div className="flex items-center gap-4">
                 {mode === "prep" ? (
                   <button
@@ -924,7 +808,7 @@ export default function LiveClassRoom() {
                 ) : (
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg font-mono font-bold border border-red-100">
-                      <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse" />
+                      <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse" />{" "}
                       LIVE {fmt(timer)}
                     </div>
                     <button
@@ -954,11 +838,10 @@ export default function LiveClassRoom() {
                       : "bg-green-100 text-green-700 hover:bg-green-200"
                   }`}
                 >
-                  {isMuted ? <FiMicOff /> : <FiMic />}
+                  {isMuted ? <FiMicOff /> : <FiMic />}{" "}
                   {isMuted ? "Unmute Mic" : "Mute Mic"}
                 </button>
               </div>
-
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-green-50 p-2 rounded-xl border border-green-100 text-center">
                   <FiThumbsUp className="mx-auto text-green-600 mb-1" />
@@ -988,7 +871,6 @@ export default function LiveClassRoom() {
                   Class Chat
                 </span>
               </div>
-
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
                 {chatMessages.length === 0 ? (
                   <p className="text-center text-gray-400 text-xs mt-10">
@@ -1012,7 +894,6 @@ export default function LiveClassRoom() {
                   ))
                 )}
               </div>
-
               <div className="p-3 border-t border-gray-100">
                 {isLive ? (
                   <form onSubmit={handleSendChat} className="flex gap-2">

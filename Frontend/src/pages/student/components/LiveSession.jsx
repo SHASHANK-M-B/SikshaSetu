@@ -9,8 +9,6 @@ import {
   FiMicOff,
   FiArrowLeft,
   FiMessageSquare,
-  FiCalendar,
-  FiClock,
 } from "react-icons/fi";
 import { io } from "socket.io-client";
 import {
@@ -20,10 +18,11 @@ import {
 } from "@/api/student";
 
 // --- CONSTANTS AND UTILS ---
+// Hardcoded for Production Deployment
 const SOCKET_URL =
   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
-  // Local
+  // local
   // const SOCKET_URL =
   // "http://localhost:8928/live-session";
 
@@ -129,16 +128,23 @@ export default function LiveSession() {
     else stopMicrophone();
   };
 
-  // --- DRAWING ---
+  // --- DRAWING (NORMALIZED) ---
+  // Teacher sends coordinates as 0.0-1.0 percentages.
+  // We multiply by our local canvas size to draw correctly.
   const drawLine = useCallback(
     ({ fromX, fromY, toX, toY, color, lineWidth }) => {
       const ctx = canvasContextRef.current;
       if (!ctx) return;
+
+      const w = canvasRef.current.width;
+      const h = canvasRef.current.height;
+
       ctx.strokeStyle = color;
       ctx.lineWidth = lineWidth;
       ctx.beginPath();
-      ctx.moveTo(fromX, fromY);
-      ctx.lineTo(toX, toY);
+      // Multiply normalized coords by local width/height
+      ctx.moveTo(fromX * w, fromY * h);
+      ctx.lineTo(toX * w, toY * h);
       ctx.stroke();
       ctx.closePath();
     },
