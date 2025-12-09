@@ -20,16 +20,10 @@ import {
 } from "@/api/student";
 
 // --- DYNAMIC SOCKET URL ---
-// --- CONSTANTS AND UTILS ---
-const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+const SOCKET_URL = "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
-// FIX: Append '/live-session' to the end of BOTH URLs
-const SOCKET_URL = isLocal 
-  ? "http://localhost:8928/live-session" 
-  : "https://sikshasetu-backend-856403064619.asia-south2.run.app/live-session";
-
-const STUDENT_ID = "STUDENT_ID_HERE"; // Placeholder
-const STUDENT_NAME = "Student Name"; // Placeholder
+const STUDENT_ID = "STUDENT_ID_HERE"; 
+const STUDENT_NAME = "Student Name";
 
 export default function LiveSession() {
   const [joined, setJoined] = useState(false);
