@@ -60,8 +60,14 @@ export const getLiveSessionDetails = (id) =>
 export const startLiveSession = (id) =>
   client.post(`/api/teacher/live-session/start/${id}`);
 
+export const uploadSlides = (id, data) =>
+  client.post(`/api/teacher/live-session/upload-slides/${id}`, data);
+
 export const endLiveSession = (id) =>
   client.post(`/api/teacher/live-session/end/${id}`);
+
+export const deleteLiveSession = (id) =>
+  client.delete(`/api/teacher/live-session/${id}`);
 
 export const uploadSessionMaterial = (id, formData) =>
   client.post(`/api/teacher/live-session/upload-material/${id}`, formData);

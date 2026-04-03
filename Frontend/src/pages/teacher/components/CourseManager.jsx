@@ -95,21 +95,24 @@ export default function CourseManager() {
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <input
-              placeholder="Course name"
+              required
+              placeholder="Course name *"
               name="courseName"
               value={courseData.courseName}
               onChange={handleChange}
               className="p-2 rounded border"
             />
             <input
-              placeholder="Course code"
+              required
+              placeholder="Course code *"
               name="courseCode"
               value={courseData.courseCode}
               onChange={handleChange}
               className="p-2 rounded border"
             />
             <input
-              placeholder="Short desc"
+              required
+              placeholder="Short desc *"
               name="shortDescription"
               value={courseData.shortDescription}
               onChange={handleChange}
@@ -178,7 +181,7 @@ export default function CourseManager() {
           <div className="bg-white p-6 rounded-xl w-[350px] shadow-xl">
             <h2 className="text-lg font-bold mb-3">Edit Course</h2>
 
-            <label className="text-sm font-semibold">Course Name</label>
+            <label className="text-sm font-semibold">Course Name <span className="text-red-500">*</span></label>
             <input
               className="border rounded-lg w-full px-3 py-2 mb-3"
               value={editCourse.courseName}
@@ -190,7 +193,7 @@ export default function CourseManager() {
               }
             />
 
-            <label className="text-sm font-semibold">Short Description</label>
+            <label className="text-sm font-semibold">Short Description <span className="text-red-500">*</span></label>
             <textarea
               className="border rounded-lg w-full px-3 py-2 mb-3"
               rows="3"

@@ -20,11 +20,9 @@ import {
 // --- CONSTANTS AND UTILS ---
 // Hardcoded for Production Deployment
 const SOCKET_URL =
-  "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
-
-  // Local
-  // const SOCKET_URL =
-  // "http://localhost:8928/live-session";
+  "http://localhost:8928/live-session";
+// const SOCKET_URL =
+//   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
 const STUDENT_ID = "STUDENT_ID_HERE";
 const STUDENT_NAME = "Student Name";
@@ -501,23 +499,33 @@ export default function LiveSession() {
         {/* Viewport */}
         <div
           ref={viewportContainerRef}
-          className="flex-1 flex items-center justify-center bg-black/90 relative"
+          className="flex-1 flex items-center justify-center bg-black/95 relative overflow-hidden"
         >
           {currentSlideImage ? (
-            <>
+            <div className="relative w-full h-full flex items-center justify-center">
               <img
                 src={currentSlideImage}
-                className="max-w-full max-h-full object-contain"
+                className="max-w-full max-h-full w-auto h-auto object-contain shadow-2xl transition-all duration-300"
+                style={{ WebkitUserSelect: "none" }}
                 onLoad={resizeCanvas}
               />
               <canvas
                 ref={canvasRef}
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ width: "100%", maxHeight: "100%" }}
+                style={{
+                  width: "auto",
+                  height: "auto",
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                }}
               />
-            </>
+            </div>
           ) : (
-            <h1 className="text-white opacity-50">Waiting for slides...</h1>
+            <div className="flex flex-col items-center gap-4 text-white/30 text-center p-8">
+              <div className="w-16 h-16 border-4 border-white/10 border-t-white/50 rounded-full animate-spin mb-2" />
+              <p className="text-xl font-medium">Waiting for teacher's presentation...</p>
+              <p className="text-sm">The slides will appear here automatically.</p>
+            </div>
           )}
         </div>
 
