@@ -1,7 +1,7 @@
 import axios from "axios";
 
-// const BASE_URL = "https://sikshasetu-backend-1030932275340.asia-south1.run.app";
-const BASE_URL = "http://localhost:8928";
+const BASE_URL = "https://sikshasetu-backend-1030932275340.asia-south1.run.app";
+// const BASE_URL = "http://localhost:8928";
 
 const client = axios.create({
   baseURL: BASE_URL,
