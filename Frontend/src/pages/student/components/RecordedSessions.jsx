@@ -57,12 +57,31 @@ export default function RecordedSession() {
   useEffect(() => {
     getRecordedSessionLists();
 
+    // Load persisted downloaded sessions
+    const saved = localStorage.getItem("DOWNLOADED_SESSIONS");
+    if (saved) {
+      const downloadedIds = JSON.parse(saved);
+      setSessions((prev) =>
+        prev.map((s) =>
+          downloadedIds.includes(s.id) ? { ...s, downloaded: true } : s
+        )
+      );
+    }
+
     // Cleanup audio on unmount
     return () => {
       audioRef.current.pause();
       audioRef.current.src = "";
     };
   }, []);
+
+  // Update localStorage when a session is downloaded
+  useEffect(() => {
+    const downloadedIds = sessions
+      .filter((s) => s.downloaded)
+      .map((s) => s.id);
+    localStorage.setItem("DOWNLOADED_SESSIONS", JSON.stringify(downloadedIds));
+  }, [sessions]);
 
   // Handle Audio Playback Effect
   useEffect(() => {
@@ -91,9 +110,38 @@ export default function RecordedSession() {
       };
 
       audio.addEventListener("timeupdate", updateProgress);
-      return () => audio.removeEventListener("timeupdate", updateProgress);
+
+      // Slide Synchronization Logic
+      const syncSlides = () => {
+        if (!activeSession.slideAudioMapping) return;
+
+        const currentTime = audio.currentTime;
+        const mapping = activeSession.slideAudioMapping;
+        const entries = Object.entries(mapping)
+          .map(([idx, time]) => ({ idx: parseInt(idx), time }))
+          .sort((a, b) => a.time - b.time);
+
+        let correctSlideIdx = 0;
+        for (let i = entries.length - 1; i >= 0; i--) {
+          if (currentTime >= entries[i].time) {
+            correctSlideIdx = entries[i].idx;
+            break;
+          }
+        }
+
+        if (correctSlideIdx !== currentSlideIndex) {
+          setCurrentSlideIndex(correctSlideIdx);
+        }
+      };
+
+      audio.addEventListener("timeupdate", syncSlides);
+
+      return () => {
+        audio.removeEventListener("timeupdate", updateProgress);
+        audio.removeEventListener("timeupdate", syncSlides);
+      };
     }
-  }, [activeSession, playing, muted]);
+  }, [activeSession, playing, muted, currentSlideIndex]);
 
   const handleDownload = async (sessionId) => {
     try {
@@ -163,6 +211,22 @@ export default function RecordedSession() {
     }
   };
 
+  // Sync audio when slide is changed manually
+  useEffect(() => {
+    if (activeSession && activeSession.slideAudioMapping && audioRef.current) {
+      const mapping = activeSession.slideAudioMapping;
+      const startTime = mapping[currentSlideIndex];
+
+      // Only seek if the difference is significant to avoid stuttering during auto-play
+      if (
+        startTime !== undefined &&
+        Math.abs(audioRef.current.currentTime - startTime) > 0.5
+      ) {
+        audioRef.current.currentTime = startTime;
+      }
+    }
+  }, [currentSlideIndex]);
+
   if (activeSession) {
     // Check if slides exist and get the URL. Backend returns objects { url: "..." }
     const currentSlide = activeSession.slides?.[currentSlideIndex];
@@ -203,19 +267,43 @@ export default function RecordedSession() {
                 Loading content...
               </div>
             ) : slideSrc ? (
-              <img
-                src={slideSrc}
-                alt={`Slide ${currentSlideIndex + 1}`}
-                className="w-full h-full object-cover"
-              />
+              <div className="w-full h-full flex items-center justify-center p-4">
+                <img
+                  src={slideSrc}
+                  alt={`Slide ${currentSlideIndex + 1}`}
+                  className="max-w-full max-h-full object-contain"
+                />
+
+                {/* SLIDE NAVIGATION OVERLAY */}
+                <button
+                  onClick={() => setCurrentSlideIndex((p) => Math.max(0, p - 1))}
+                  disabled={currentSlideIndex === 0}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 disabled:opacity-30"
+                >
+                  <FiArrowLeft size={24} />
+                </button>
+                <button
+                  onClick={() =>
+                    setCurrentSlideIndex((p) =>
+                      Math.min((activeSession.slides?.length || 1) - 1, p + 1)
+                    )
+                  }
+                  disabled={
+                    currentSlideIndex === (activeSession.slides?.length || 1) - 1
+                  }
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 disabled:opacity-30"
+                >
+                  <FiPlay className="rotate-0" /> {/* Using FiPlay as a simplified arrow here or another icon if available */}
+                </button>
+              </div>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-slate-300">
                 No slide available
               </div>
             )}
 
-            <div className="absolute top-3 left-4 bg-emerald-500 text-[11px] px-3 py-1 rounded-full">
-              Static PPT Dashboard
+            <div className="absolute top-3 left-4 bg-emerald-500 text-[11px] px-3 py-1 rounded-full text-white">
+              Slide {currentSlideIndex + 1} / {activeSession.slides?.length || 0}
             </div>
           </div>
 

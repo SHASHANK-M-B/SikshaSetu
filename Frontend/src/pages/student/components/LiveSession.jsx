@@ -9,6 +9,8 @@ import {
   FiMicOff,
   FiArrowLeft,
   FiMessageSquare,
+  FiCalendar,
+  FiClock,
 } from "react-icons/fi";
 import { io } from "socket.io-client";
 import {
@@ -20,11 +22,9 @@ import {
 // --- CONSTANTS AND UTILS ---
 // Hardcoded for Production Deployment
 const SOCKET_URL =
-  "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
-
-  // Local
-  // const SOCKET_URL =
-  // "http://localhost:8928/live-session";
+  "http://localhost:8928/live-session";
+// const SOCKET_URL =
+//   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 
 const STUDENT_ID = "STUDENT_ID_HERE";
 const STUDENT_NAME = "Student Name";
@@ -51,6 +51,8 @@ export default function LiveSession() {
   // UI State
   const [showDownloadPopup, setShowDownloadPopup] = useState(false);
   const [materials, setMaterials] = useState([]);
+  const [isWaiting, setIsWaiting] = useState(true);
+  const [socketStatus, setSocketStatus] = useState("disconnected");
   const chatContainerRef = useRef(null);
 
   // Annotation Canvas Refs
@@ -217,53 +219,84 @@ export default function LiveSession() {
 
   // --- SOCKET CONNECTION ---
   useEffect(() => {
-    if (joined && activeClass) {
-      console.log("Initializing Socket connection to:", SOCKET_URL);
+    console.log("[Socket] Initializing dashboard sync socket...");
+    const socket = io(SOCKET_URL, { withCredentials: true });
+    socketRef.current = socket;
 
+    socket.on("connect", () => {
+      console.log("[Socket] Student connected for status sync");
+      setSocketStatus("connected");
+    });
+
+    socket.on("disconnect", () => {
+      console.warn("[Socket] Disconnected");
+      setSocketStatus("disconnected");
+    });
+
+    // GLOBAL STATUS LISTENERS (For the list view)
+    socket.on("session-started", (data) => {
+      console.log(`[Socket] Session ${data.sessionId} is now LIVE!`);
+      setSessions(prev => prev.map(s => 
+        s.sessionId === data.sessionId ? { ...s, isActive: true } : s
+      ));
+    });
+
+    socket.on("session-ended", (data) => {
+      console.log(`[Socket] Session ${data.sessionId} has ended.`);
+      setSessions(prev => prev.map(s => 
+        s.sessionId === data.sessionId ? { ...s, isActive: false, endedAt: data.endedAt || true } : s
+      ).filter(s => !s.endedAt)); // Optional: hide ended sessions immediately
+      
+      // If student is currently IN that session, handle redirection
+      if (joined && activeClass?.sessionId === data.sessionId) {
+        alert(data.message || "The teacher has ended the session.");
+        setJoined(false);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  // SESSION-SPECIFIC SOCKET LOGIC (Runs after joining)
+  useEffect(() => {
+    if (joined && activeClass && socketRef.current) {
+      const socket = socketRef.current;
+      
       closePeerConnection();
 
-      socketRef.current = io(SOCKET_URL, {
-        withCredentials: true,
+      console.log("[Socket] Joining session room:", activeClass.sessionId);
+      socket.emit("join-session", {
+        sessionId: activeClass.sessionId,
+        userId: STUDENT_ID,
+        userName: STUDENT_NAME,
+        role: "student",
       });
 
-      const socket = socketRef.current;
-
-      socket.on("connect", () => {
-        console.log("✅ Student Connected to Live Session Socket:", socket.id);
-
-        socket.emit("join-session", {
-          sessionId: activeClass.sessionId,
-          userId: STUDENT_ID,
-          userName: STUDENT_NAME,
-          role: "student",
-        });
-
-        // Request stream immediately
-        console.log("Requesting teacher stream...");
-        socket.emit("request-teacher-stream", {
-          sessionId: activeClass.sessionId,
-        });
+      // Request stream immediately
+      socket.emit("request-teacher-stream", {
+        sessionId: activeClass.sessionId,
       });
 
-      // Listeners
+      // Session Listeners
       socket.on("chat-message", (msg) =>
         setChatMessages((prev) => [...prev, msg])
       );
 
-      socket.on("change-slide", (data) => {
-        if (data.slideImage) setCurrentSlideImage(data.slideImage);
-        // Clear strokes on slide change
+      const handleSlideUpdate = (data) => {
+        console.log(`[Sync] Received slide update:`, data);
+        if (data && data.slideImage) {
+          setCurrentSlideImage(data.slideImage);
+          setIsWaiting(false); 
+        }
         strokesRef.current = [];
         currentStrokeRef.current = [];
         redrawCanvas();
-      });
+      };
 
-      socket.on("slide-changed", (data) => {
-        setCurrentSlideImage(data.slideImage);
-        strokesRef.current = [];
-        currentStrokeRef.current = [];
-        redrawCanvas();
-      });
+      socket.on("change-slide", handleSlideUpdate);
+      socket.on("slide-changed", handleSlideUpdate);
 
       socket.on("new-material", (material) => {
         setMaterials((prev) => [...prev, material]);
@@ -276,8 +309,8 @@ export default function LiveSession() {
       });
 
       socket.on("annotation-draw", (data) => {
-        drawSegment(data.data); // Draw immediately
-        currentStrokeRef.current.push(data.data); // Add to current stroke
+        drawSegment(data.data);
+        currentStrokeRef.current.push(data.data);
       });
 
       socket.on("end-stroke", () => {
@@ -300,7 +333,6 @@ export default function LiveSession() {
 
       // WebRTC Offer
       socket.on("webrtc-offer", async ({ offer, fromSocketId }) => {
-        console.log("Received WebRTC Offer from teacher");
         const pc = await createPeerConnection(fromSocketId);
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
@@ -318,12 +350,36 @@ export default function LiveSession() {
       });
 
       return () => {
-        if (socket) socket.disconnect();
+        socket.off("chat-message");
+        socket.off("change-slide");
+        socket.off("slide-changed");
+        socket.off("new-material");
+        socket.off("start-stroke");
+        socket.off("annotation-draw");
+        socket.off("end-stroke");
+        socket.off("undo-annotation");
+        socket.off("clear-canvas");
+        socket.off("webrtc-offer");
+        socket.off("webrtc-ice-candidate");
         closePeerConnection();
         stopMicrophone();
       };
     }
   }, [joined, activeClass, createPeerConnection]);
+
+  // FIX 5a: Poll for sync every 4 seconds while student is on waiting screen
+  useEffect(() => {
+    if (!joined || !isWaiting || !socketRef.current || !activeClass) return;
+
+    const interval = setInterval(() => {
+      console.log("[Sync] Polling for slide sync...");
+      socketRef.current.emit("request-sync", { 
+        sessionId: activeClass.sessionId 
+      });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [joined, isWaiting, activeClass]);
 
   // --- HANDLERS ---
   const handleJoinSession = async (session) => {
@@ -341,6 +397,15 @@ export default function LiveSession() {
       setChatMessages(chatRes.data.chat || []);
       setMaterials(matRes.data.materials || []);
       setActiveClass(session);
+
+      // FIX 2: Initialize slide state immediately from session object if available
+      if (session.currentSlideImage) {
+        setCurrentSlideImage(session.currentSlideImage);
+        setIsWaiting(false);
+      } else {
+        setIsWaiting(true);
+      }
+
       setJoined(true); // Triggers the socket useEffect
 
       setTimeout(resizeCanvas, 100);
@@ -430,6 +495,22 @@ export default function LiveSession() {
                   {cls.isActive ? "LIVE NOW" : "Scheduled"}
                 </span>
                 <h2 className="text-xl font-bold mt-2">{cls.sessionTitle}</h2>
+                {!cls.isActive && cls.scheduledDate && (
+                  <div className="flex gap-4 mt-2 text-sm text-gray-500 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <FiCalendar className="text-indigo-500" />
+                      {new Date(cls.scheduledDate).toLocaleDateString(undefined, { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <FiClock className="text-indigo-500" />
+                      {cls.scheduledTime || "TBA"}
+                    </span>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => handleJoinSession(cls)}
@@ -501,23 +582,33 @@ export default function LiveSession() {
         {/* Viewport */}
         <div
           ref={viewportContainerRef}
-          className="flex-1 flex items-center justify-center bg-black/90 relative"
+          className="flex-1 flex items-center justify-center bg-black/95 relative overflow-hidden"
         >
-          {currentSlideImage ? (
-            <>
+          {(currentSlideImage && !isWaiting) ? (
+            <div className="relative w-full h-full flex items-center justify-center">
               <img
                 src={currentSlideImage}
-                className="max-w-full max-h-full object-contain"
+                className="max-w-full max-h-full w-auto h-auto object-contain shadow-2xl transition-all duration-300"
+                style={{ WebkitUserSelect: "none" }}
                 onLoad={resizeCanvas}
               />
               <canvas
                 ref={canvasRef}
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ width: "100%", maxHeight: "100%" }}
+                style={{
+                  width: "auto",
+                  height: "auto",
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                }}
               />
-            </>
+            </div>
           ) : (
-            <h1 className="text-white opacity-50">Waiting for slides...</h1>
+            <div className="flex flex-col items-center gap-4 text-white/30 text-center p-8">
+              <div className="w-16 h-16 border-4 border-white/10 border-t-white/50 rounded-full animate-spin mb-2" />
+              <p className="text-xl font-medium">Waiting for teacher's presentation...</p>
+              <p className="text-sm">The slides will appear here automatically.</p>
+            </div>
           )}
         </div>
 
@@ -539,6 +630,10 @@ export default function LiveSession() {
             >
               <FiThumbsUp />
             </button>
+            <div className="flex items-center gap-3">
+              <div className={`w-2 h-2 rounded-full ${socketStatus === "connected" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
+              <div className="text-white/60 text-sm font-medium">Session Live</div>
+            </div>
             <button
               onClick={() => setShowDownloadPopup(true)}
               className="p-3 rounded-full bg-blue-100 text-blue-600"

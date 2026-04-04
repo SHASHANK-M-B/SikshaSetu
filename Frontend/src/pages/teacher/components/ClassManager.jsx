@@ -67,11 +67,13 @@ export default function ClassManager({ user }) {
                 grid grid-cols-1 md:grid-cols-2 gap-2"
             >
                 <select
+                    required
                     value={form.courseId}
                     onChange={(e) => setForm({ ...form, courseId: e.target.value })}
                     className="p-2 border rounded"
                 >
-                    {courses.length === 0 && <option>No courses</option>}
+                    <option value="">Select Course *</option>
+                    {courses.length === 0 && <option disabled>No courses</option>}
 
                     {courses.map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
@@ -79,13 +81,15 @@ export default function ClassManager({ user }) {
                 </select>
 
                 <input
-                    placeholder="Session title"
+                    required
+                    placeholder="Session title *"
                     value={form.title}
                     onChange={(e) => setForm({ ...form, title: e.target.value })}
                     className="p-2 border rounded"
                 />
 
                 <input
+                    required
                     type="datetime-local"
                     value={form.datetime}
                     onChange={(e) => setForm({ ...form, datetime: e.target.value })}
@@ -93,8 +97,10 @@ export default function ClassManager({ user }) {
                 />
 
                 <input
+                    required
                     type="number"
                     min={10}
+                    placeholder="Duration (mins) *"
                     value={form.duration}
                     onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })}
                     className="p-2 border rounded"

@@ -166,9 +166,10 @@ export default function DiscussionDoubts() {
 
         <div className="flex flex-col sm:flex-row gap-2">
           <input
+            required
             value={teacherMsg}
             onChange={(e) => setTeacherMsg(e.target.value)}
-            placeholder="Type an announcement for all students..."
+            placeholder="Type an announcement for all students... *"
             className="flex-1 border border-blue-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
           />
 
@@ -286,9 +287,10 @@ export default function DiscussionDoubts() {
               <div className="mt-4 animate-in slide-in-from-top-2 fade-in">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
+                    required
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Write a clear explanation..."
+                    placeholder="Write a clear explanation... *"
                     className="flex-1 border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
                     autoFocus
                   />
