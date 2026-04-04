@@ -6,6 +6,7 @@ import {
 } from "@/api/teacher";
 import React, { useState, useEffect } from "react";
 import { FiBook } from "react-icons/fi";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 export default function CourseManager() {
   const initialData = {
     courseName: "",
@@ -15,6 +16,7 @@ export default function CourseManager() {
   const [courses, setCourses] = useState([]);
   const [courseData, setCourseData] = useState(initialData);
   const [loading, setLoading] = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingCourseId, setLoadingCourseId] = useState(null);
   const [editCourse, setEditCourse] = useState(null);
 
@@ -28,10 +30,15 @@ export default function CourseManager() {
   };
 
   const getAllCourses = async () => {
-    const response = await getCourses();
-    setCourses(response.data.courses);
+    setLoadingInitial(true);
     try {
-    } catch (error) {}
+      const response = await getCourses();
+      setCourses(response.data.courses);
+    } catch (error) {
+      console.error("Failed to fetch courses:", error);
+    } finally {
+      setLoadingInitial(false);
+    }
   };
 
   useEffect(() => {
@@ -84,6 +91,7 @@ export default function CourseManager() {
 
   return (
     <div>
+      {loadingInitial && <LoadingScreen message="Loading courses..." />}
       <div className="max-w-3xl mx-auto space-y-6">
         <h3 className="font-bold text-2xl text-indigo-700 flex items-center gap-2">
           <FiBook /> Manage Courses

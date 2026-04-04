@@ -7,6 +7,7 @@ import {
 import { Trophy } from "lucide-react";
 import React, { useEffect, useState, useMemo } from "react";
 import { FiUsers, FiChevronDown, FiChevronUp, FiX } from "react-icons/fi";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 // Function to transform backend student data into the required structure
 const transformStudentData = (backendStudents) => {
@@ -32,6 +33,7 @@ export default function StudentManagement({ organisationData }) {
   // States for backend data
   const [allStudents, setAllStudents] = useState([]); // Stores raw data from API
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // -----------------------
   // Student Data Processing
@@ -96,10 +98,19 @@ export default function StudentManagement({ organisationData }) {
   };
 
   useEffect(() => {
-    if (organisationData?.orgId) {
-      fetchPendingRequests();
-      getAllAstudentsList();
-    }
+    const fetchData = async () => {
+      if (organisationData?.orgId) {
+        setLoading(true);
+        try {
+          await Promise.all([fetchPendingRequests(), getAllAstudentsList()]);
+        } catch (error) {
+          console.error("Error fetching data:", error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchData();
   }, [organisationData]); // Dependency on organisationData
 
   // Accept request: fetch updated lists
@@ -127,6 +138,7 @@ export default function StudentManagement({ organisationData }) {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
+      {loading && <LoadingScreen message="Loading Student Management..." />}
       {/* ORG HEADER */}
       <div className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 rounded-xl shadow flex items-center justify-between">
         <div>

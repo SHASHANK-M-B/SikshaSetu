@@ -31,6 +31,8 @@ import RecordedSessions from "./components/RecordedSessions";
 import { getStudentDashboard } from "@/api/student";
 import { logoutUser } from "@/api/auth";
 import { useNavigate } from "react-router-dom";
+import LoadingScreen from "@/components/ui/LoadingScreen";
+import { getCache, setCache } from "@/utils/cache";
 
 // ⭐ Organization Logo
 const ORG_LOGO = "https://i.ibb.co/4Z1qZ4D/default-org.png";
@@ -63,6 +65,7 @@ export default function StudentDashboard() {
   }, [activeTab]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Dummy student name (replace later with login name)
   const studentName = localStorage.getItem("studentName") || "Student User";
@@ -130,25 +133,44 @@ export default function StudentDashboard() {
   const renderContent = components[activeTab];
 
   useEffect(() => {
-    const fetchStudentDetails = async () => {
+    const fetchStudentData = async () => {
+      const cachedData = getCache("student_dashboard");
+      if (cachedData) {
+        setStudentDetails(cachedData);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
         const response = await getStudentDashboard();
         setStudentDetails(response.data);
-      } catch (error) {}
+        setCache("student_dashboard", response.data, 10); // Cache for 10 minutes
+      } catch (error) {
+        console.error("Failed to fetch student dashboard:", error);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchStudentDetails();
+    fetchStudentData();
   }, []);
 
   const logout = async () => {
+    setLoading(true);
     try {
       const response = await logoutUser();
       if (response.status === 200) {
         navigate("/");
       }
-    } catch (error) {}
+    } catch (error) {
+    } finally {
+      setLoading(false);
+    }
   };
   return (
-    <div className="h-screen flex flex-col lg:flex-row bg-gray-100 overflow-hidden">
+    <>
+      {loading && <LoadingScreen message="Loading Student Dashboard" />}
+      <div className="h-screen flex flex-col lg:flex-row bg-gray-100 overflow-hidden">
       {/* MOBILE HEADER */}
       <div
         className={`lg:hidden fixed top-0 w-full px-4 py-3 flex items-center justify-between
@@ -327,5 +349,6 @@ export default function StudentDashboard() {
         </motion.div>
       </main>
     </div>
+    </>
   );
 }

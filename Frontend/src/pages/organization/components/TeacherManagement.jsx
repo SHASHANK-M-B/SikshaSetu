@@ -1,6 +1,7 @@
 import { approveTeacher, getTeacherRequest, rejectTeacher } from "@/api/admin";
 import React, { useState, useMemo, useEffect } from "react";
 import { FiUsers, FiPlusCircle, FiTrash2 } from "react-icons/fi";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 export default function TeacherManagement({
   teachers = [],
@@ -131,17 +132,18 @@ export default function TeacherManagement({
   const closeDetail = () => setDetailExpert(null);
 
   const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const fetchRequests = async () => {
-    // setLoading(true);
+    setLoading(true);
     try {
       const response = await getTeacherRequest();
 
       setRequests(response.data.teachers || []);
     } catch (error) {
-      alert(error.response?.data?.message || "Failed to fetch organizations");
+      console.error("Failed to fetch teacher requests:", error);
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -151,6 +153,7 @@ export default function TeacherManagement({
 
   return (
     <div className="space-y-6 px-4 py-6">
+      {loading && <LoadingScreen message="Loading Teacher Requests..." />}
       {/* ===== Stats Row ===== */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white border p-4 rounded">
         <div className="flex-1">

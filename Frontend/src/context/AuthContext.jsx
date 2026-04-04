@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logoutUser } from '../api/auth';
+import { clearCache } from '../utils/cache';
 
 const AuthContext = createContext();
 
@@ -38,11 +39,8 @@ export const AuthProvider = ({ children }) => {
     } catch {
       // Silent fail
     } finally {
-      localStorage.removeItem('userData');
-      localStorage.removeItem('teacherName');
-      localStorage.removeItem('organizationName');
-      localStorage.removeItem('studentName');
-      localStorage.removeItem('userRole');
+      localStorage.clear();
+      clearCache();
       setUser(null);
       navigate('/');
     }
