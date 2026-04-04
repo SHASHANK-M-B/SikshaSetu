@@ -22,9 +22,9 @@ import {
 // --- CONSTANTS AND UTILS ---
 // Hardcoded for Production Deployment
 const SOCKET_URL =
-  "http://localhost:8928/live-session";
+  "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
 // const SOCKET_URL =
-//   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
+//   "http://localhost:8928/live-session";
 
 const STUDENT_ID = "STUDENT_ID_HERE";
 const STUDENT_NAME = "Student Name";
