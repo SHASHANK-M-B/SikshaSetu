@@ -654,11 +654,10 @@ export default function LiveClassRoom() {
       // Ensure microphone is ready
       await startMicrophone();
       
-      // FIX 3a: Pass first slide data into the API call so Firestore
-      // has currentSlideImage BEFORE the socket event is emitted
-      console.log("Starting session with ID:", currentSession.sessionId);
+      // OPTIMIZATION: Don't send the large slide image again here.
+      // It was already uploaded and stored in Firestore via uploadSlides().
+      // This prevents PayloadTooLargeError and server crashes.
       const response = await startLiveSession(currentSession.sessionId, {
-        currentSlideImage: slidesDeck[0]?.imageUrl,
         currentSlideIndex: 0,
       });
       console.log("Session start response:", response);
@@ -689,6 +688,12 @@ export default function LiveClassRoom() {
     try {
       setLoading(true);
       await endLiveSession(currentSession.sessionId);
+      
+      // Notify students via socket
+      if (socketRef.current) {
+        socketRef.current.emit("end-session", { sessionId: currentSession.sessionId });
+      }
+
       stopMicrophone();
       setIsLive(false);
       peerConnectionsRef.current.forEach((pc) => pc.close());

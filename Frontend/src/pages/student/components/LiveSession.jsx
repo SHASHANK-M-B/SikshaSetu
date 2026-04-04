@@ -281,6 +281,11 @@ export default function LiveSession() {
         alert("New material uploaded!");
       });
 
+      socket.on("session-ended", (data) => {
+        alert(data.message || "The teacher has ended the session.");
+        setJoined(false); // This will trigger the return to dashboard logic in the parent/wrapper
+      });
+
       // --- ANNOTATION SYNC ---
       socket.on("start-stroke", () => {
         currentStrokeRef.current = [];
