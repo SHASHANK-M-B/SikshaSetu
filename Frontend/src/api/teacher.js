@@ -57,8 +57,8 @@ export const getLiveSessions = () => client.get("/api/teacher/live-session");
 export const getLiveSessionDetails = (id) =>
   client.get(`/api/teacher/live-session/${id}`);
 
-export const startLiveSession = (id) =>
-  client.post(`/api/teacher/live-session/start/${id}`);
+export const startLiveSession = (id, data) =>
+  client.post(`/api/teacher/live-session/start/${id}`, data);
 
 export const uploadSlides = (id, data) =>
   client.post(`/api/teacher/live-session/upload-slides/${id}`, data);

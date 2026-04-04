@@ -155,6 +155,7 @@ export default function LiveClassRoom() {
   const [uploading, setUploading] = useState(false);
 
   // --- REFS ---
+  const strokesRef = useRef([]);
   const socketRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const peerConnectionsRef = useRef(new Map());
@@ -169,8 +170,13 @@ export default function LiveClassRoom() {
     lineWidth: 5,
   });
 
+  // Latest state refs to avoid stale closures in socket listeners
+  const slideIndexRef = useRef(0);
+  const slidesDeckRef = useRef([]);
+  useEffect(() => { slideIndexRef.current = slideIndex; }, [slideIndex]);
+  useEffect(() => { slidesDeckRef.current = slidesDeck; }, [slidesDeck]);
+
   // History for Undo
-  const strokesRef = useRef([]); // Stores all completed strokes
   const currentStrokeRef = useRef([]); // Stores the stroke currently being drawn
 
   // --- INITIAL LOAD ---
@@ -314,6 +320,25 @@ export default function LiveClassRoom() {
         }
       });
 
+      // FIX 4: When backend signals a student needs re-sync, 
+      // re-broadcast the current slide to everyone in the room
+      socket.on("request-slide-sync", (data) => {
+        if (!isLive) return;
+        console.log("[Sync] Received re-sync request from student:", data?.requestedBy);
+        
+        const currentIndex = slideIndexRef.current;
+        const currentSlides = slidesDeckRef.current;
+
+        if (currentSlides[currentIndex]) {
+          console.log(`[Sync] Re-broadcasting slide ${currentIndex}`);
+          socket.emit("change-slide", {
+            sessionId: currentSession.sessionId,
+            slideIndex: currentIndex,
+            slideImage: currentSlides[currentIndex].imageUrl,
+          });
+        }
+      });
+
       return () => {
         if (socket) socket.disconnect();
         peerConnectionsRef.current.forEach((pc) => pc.close());
@@ -321,7 +346,7 @@ export default function LiveClassRoom() {
         stopMicrophone();
       };
     }
-  }, [mode, currentSession, isLive, createPeerConnection]);
+  }, [mode, currentSession, isLive, createPeerConnection]); // Removed slideIndex/slidesDeck to prevent reconnection on every slide change
 
   // --- MICROPHONE LOGIC ---
   const startMicrophone = async () => {
@@ -390,9 +415,11 @@ export default function LiveClassRoom() {
       );
     }
 
-    if (socketRef.current && isLive) {
+    if (socketRef.current && isLive && currentSession?.sessionId) {
+      const sessionId = currentSession.sessionId;
+      console.log(`[Sync] Emitting change-slide for index ${newIndex} (Session: ${sessionId})`);
       socketRef.current.emit("change-slide", {
-        sessionId: currentSession.sessionId,
+        sessionId: sessionId,
         slideIndex: newIndex,
         slideImage: slidesDeck[newIndex].imageUrl,
       });
@@ -613,19 +640,27 @@ export default function LiveClassRoom() {
   };
 
   const handleStartLive = async () => {
-    if (slidesDeck.length === 0) {
-      alert("Please upload slides (PDF) before starting the session.");
+    if (!currentSession) return;
+    
+    // PHASE 4: Check if slides are uploaded before going live
+    if (!slidesDeck || slidesDeck.length === 0) {
+      alert("Please upload slides (PDF) before going live.");
       return;
     }
+
     try {
       setLoading(true);
       
       // Ensure microphone is ready
       await startMicrophone();
       
-      // Call backend to mark session as active
+      // FIX 3a: Pass first slide data into the API call so Firestore
+      // has currentSlideImage BEFORE the socket event is emitted
       console.log("Starting session with ID:", currentSession.sessionId);
-      const response = await startLiveSession(currentSession.sessionId);
+      const response = await startLiveSession(currentSession.sessionId, {
+        currentSlideImage: slidesDeck[0]?.imageUrl,
+        currentSlideIndex: 0,
+      });
       console.log("Session start response:", response);
 
       setIsLive(true);
@@ -638,18 +673,6 @@ export default function LiveClassRoom() {
           slideIndex: 0,
           slideImage: slidesDeck[0].imageUrl,
         });
-        
-        // Also persist the slides metadata to the database so students joining later can see them
-        try {
-          const slideMetadata = slidesDeck.map((s, i) => ({
-            id: s.id,
-            imageUrl: s.imageUrl,
-            title: s.title || `Slide ${i + 1}`
-          }));
-          await uploadSlides(currentSession.sessionId, { slides: slideMetadata });
-        } catch (metadataError) {
-          console.warn("Failed to persist slide metadata to DB:", metadataError);
-        }
       }
     } catch (error) {
       console.error("Start live error details:", error);
@@ -762,6 +785,21 @@ export default function LiveClassRoom() {
       setSlidesDeck(slides);
       setSlideIndex(0);
       URL.revokeObjectURL(url);
+
+      // Persist slides to Firestore immediately in Prep mode to avoid race conditions
+      if (slides.length > 0 && currentSession) {
+        try {
+          const slideMetadata = slides.map((s, i) => ({
+            id: s.id,
+            imageUrl: s.imageUrl,
+            title: s.title || `Slide ${i + 1}`
+          }));
+          await uploadSlides(currentSession.sessionId, { slides: slideMetadata });
+          console.log("Slides persisted to Firestore in Prep mode.");
+        } catch (metadataError) {
+          console.warn("Failed to persist slide metadata in Prep mode:", metadataError);
+        }
+      }
 
       if (isLive && socketRef.current && slides.length > 0) {
         socketRef.current.emit("change-slide", {

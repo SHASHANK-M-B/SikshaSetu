@@ -49,6 +49,8 @@ export default function LiveSession() {
   // UI State
   const [showDownloadPopup, setShowDownloadPopup] = useState(false);
   const [materials, setMaterials] = useState([]);
+  const [isWaiting, setIsWaiting] = useState(true);
+  const [socketStatus, setSocketStatus] = useState("disconnected");
   const chatContainerRef = useRef(null);
 
   // Annotation Canvas Refs
@@ -227,20 +229,30 @@ export default function LiveSession() {
       const socket = socketRef.current;
 
       socket.on("connect", () => {
-        console.log("✅ Student Connected to Live Session Socket:", socket.id);
-
+        console.log("Connected to Live Session Socket");
+        setSocketStatus("connected");
         socket.emit("join-session", {
           sessionId: activeClass.sessionId,
           userId: STUDENT_ID,
           userName: STUDENT_NAME,
           role: "student",
         });
+      });
 
-        // Request stream immediately
-        console.log("Requesting teacher stream...");
-        socket.emit("request-teacher-stream", {
-          sessionId: activeClass.sessionId,
-        });
+      socket.on("disconnect", () => {
+        console.warn("Disconnected from socket");
+        setSocketStatus("disconnected");
+      });
+
+      socket.on("reconnect", () => {
+        console.log("Reconnected to socket");
+        setSocketStatus("connected");
+      });
+
+      // Request stream immediately
+      console.log("Requesting teacher stream...");
+      socket.emit("request-teacher-stream", {
+        sessionId: activeClass.sessionId,
       });
 
       // Listeners
@@ -248,20 +260,21 @@ export default function LiveSession() {
         setChatMessages((prev) => [...prev, msg])
       );
 
-      socket.on("change-slide", (data) => {
-        if (data.slideImage) setCurrentSlideImage(data.slideImage);
+      // FIX 5b & Phase 3: Consolidated slide update handler
+      const handleSlideUpdate = (data) => {
+        console.log(`[Sync] Received slide update:`, data);
+        if (data && data.slideImage) {
+          setCurrentSlideImage(data.slideImage);
+          setIsWaiting(false); 
+        }
         // Clear strokes on slide change
         strokesRef.current = [];
         currentStrokeRef.current = [];
         redrawCanvas();
-      });
+      };
 
-      socket.on("slide-changed", (data) => {
-        setCurrentSlideImage(data.slideImage);
-        strokesRef.current = [];
-        currentStrokeRef.current = [];
-        redrawCanvas();
-      });
+      socket.on("change-slide", handleSlideUpdate);
+      socket.on("slide-changed", handleSlideUpdate);
 
       socket.on("new-material", (material) => {
         setMaterials((prev) => [...prev, material]);
@@ -323,6 +336,20 @@ export default function LiveSession() {
     }
   }, [joined, activeClass, createPeerConnection]);
 
+  // FIX 5a: Poll for sync every 4 seconds while student is on waiting screen
+  useEffect(() => {
+    if (!joined || !isWaiting || !socketRef.current || !activeClass) return;
+
+    const interval = setInterval(() => {
+      console.log("[Sync] Polling for slide sync...");
+      socketRef.current.emit("request-sync", { 
+        sessionId: activeClass.sessionId 
+      });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [joined, isWaiting, activeClass]);
+
   // --- HANDLERS ---
   const handleJoinSession = async (session) => {
     try {
@@ -339,6 +366,15 @@ export default function LiveSession() {
       setChatMessages(chatRes.data.chat || []);
       setMaterials(matRes.data.materials || []);
       setActiveClass(session);
+
+      // FIX 2: Initialize slide state immediately from session object if available
+      if (session.currentSlideImage) {
+        setCurrentSlideImage(session.currentSlideImage);
+        setIsWaiting(false);
+      } else {
+        setIsWaiting(true);
+      }
+
       setJoined(true); // Triggers the socket useEffect
 
       setTimeout(resizeCanvas, 100);
@@ -501,7 +537,7 @@ export default function LiveSession() {
           ref={viewportContainerRef}
           className="flex-1 flex items-center justify-center bg-black/95 relative overflow-hidden"
         >
-          {currentSlideImage ? (
+          {(currentSlideImage && !isWaiting) ? (
             <div className="relative w-full h-full flex items-center justify-center">
               <img
                 src={currentSlideImage}
@@ -547,6 +583,10 @@ export default function LiveSession() {
             >
               <FiThumbsUp />
             </button>
+            <div className="flex items-center gap-3">
+              <div className={`w-2 h-2 rounded-full ${socketStatus === "connected" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
+              <div className="text-white/60 text-sm font-medium">Session Live</div>
+            </div>
             <button
               onClick={() => setShowDownloadPopup(true)}
               className="p-3 rounded-full bg-blue-100 text-blue-600"
