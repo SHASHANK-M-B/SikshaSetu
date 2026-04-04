@@ -9,6 +9,8 @@ import {
   FiMicOff,
   FiArrowLeft,
   FiMessageSquare,
+  FiCalendar,
+  FiClock,
 } from "react-icons/fi";
 import { io } from "socket.io-client";
 import {
@@ -217,57 +219,77 @@ export default function LiveSession() {
 
   // --- SOCKET CONNECTION ---
   useEffect(() => {
-    if (joined && activeClass) {
-      console.log("Initializing Socket connection to:", SOCKET_URL);
+    console.log("[Socket] Initializing dashboard sync socket...");
+    const socket = io(SOCKET_URL, { withCredentials: true });
+    socketRef.current = socket;
 
+    socket.on("connect", () => {
+      console.log("[Socket] Student connected for status sync");
+      setSocketStatus("connected");
+    });
+
+    socket.on("disconnect", () => {
+      console.warn("[Socket] Disconnected");
+      setSocketStatus("disconnected");
+    });
+
+    // GLOBAL STATUS LISTENERS (For the list view)
+    socket.on("session-started", (data) => {
+      console.log(`[Socket] Session ${data.sessionId} is now LIVE!`);
+      setSessions(prev => prev.map(s => 
+        s.sessionId === data.sessionId ? { ...s, isActive: true } : s
+      ));
+    });
+
+    socket.on("session-ended", (data) => {
+      console.log(`[Socket] Session ${data.sessionId} has ended.`);
+      setSessions(prev => prev.map(s => 
+        s.sessionId === data.sessionId ? { ...s, isActive: false, endedAt: data.endedAt || true } : s
+      ).filter(s => !s.endedAt)); // Optional: hide ended sessions immediately
+      
+      // If student is currently IN that session, handle redirection
+      if (joined && activeClass?.sessionId === data.sessionId) {
+        alert(data.message || "The teacher has ended the session.");
+        setJoined(false);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  // SESSION-SPECIFIC SOCKET LOGIC (Runs after joining)
+  useEffect(() => {
+    if (joined && activeClass && socketRef.current) {
+      const socket = socketRef.current;
+      
       closePeerConnection();
 
-      socketRef.current = io(SOCKET_URL, {
-        withCredentials: true,
-      });
-
-      const socket = socketRef.current;
-
-      socket.on("connect", () => {
-        console.log("Connected to Live Session Socket");
-        setSocketStatus("connected");
-        socket.emit("join-session", {
-          sessionId: activeClass.sessionId,
-          userId: STUDENT_ID,
-          userName: STUDENT_NAME,
-          role: "student",
-        });
-      });
-
-      socket.on("disconnect", () => {
-        console.warn("Disconnected from socket");
-        setSocketStatus("disconnected");
-      });
-
-      socket.on("reconnect", () => {
-        console.log("Reconnected to socket");
-        setSocketStatus("connected");
+      console.log("[Socket] Joining session room:", activeClass.sessionId);
+      socket.emit("join-session", {
+        sessionId: activeClass.sessionId,
+        userId: STUDENT_ID,
+        userName: STUDENT_NAME,
+        role: "student",
       });
 
       // Request stream immediately
-      console.log("Requesting teacher stream...");
       socket.emit("request-teacher-stream", {
         sessionId: activeClass.sessionId,
       });
 
-      // Listeners
+      // Session Listeners
       socket.on("chat-message", (msg) =>
         setChatMessages((prev) => [...prev, msg])
       );
 
-      // FIX 5b & Phase 3: Consolidated slide update handler
       const handleSlideUpdate = (data) => {
         console.log(`[Sync] Received slide update:`, data);
         if (data && data.slideImage) {
           setCurrentSlideImage(data.slideImage);
           setIsWaiting(false); 
         }
-        // Clear strokes on slide change
         strokesRef.current = [];
         currentStrokeRef.current = [];
         redrawCanvas();
@@ -281,19 +303,14 @@ export default function LiveSession() {
         alert("New material uploaded!");
       });
 
-      socket.on("session-ended", (data) => {
-        alert(data.message || "The teacher has ended the session.");
-        setJoined(false); // This will trigger the return to dashboard logic in the parent/wrapper
-      });
-
       // --- ANNOTATION SYNC ---
       socket.on("start-stroke", () => {
         currentStrokeRef.current = [];
       });
 
       socket.on("annotation-draw", (data) => {
-        drawSegment(data.data); // Draw immediately
-        currentStrokeRef.current.push(data.data); // Add to current stroke
+        drawSegment(data.data);
+        currentStrokeRef.current.push(data.data);
       });
 
       socket.on("end-stroke", () => {
@@ -316,7 +333,6 @@ export default function LiveSession() {
 
       // WebRTC Offer
       socket.on("webrtc-offer", async ({ offer, fromSocketId }) => {
-        console.log("Received WebRTC Offer from teacher");
         const pc = await createPeerConnection(fromSocketId);
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
@@ -334,7 +350,17 @@ export default function LiveSession() {
       });
 
       return () => {
-        if (socket) socket.disconnect();
+        socket.off("chat-message");
+        socket.off("change-slide");
+        socket.off("slide-changed");
+        socket.off("new-material");
+        socket.off("start-stroke");
+        socket.off("annotation-draw");
+        socket.off("end-stroke");
+        socket.off("undo-annotation");
+        socket.off("clear-canvas");
+        socket.off("webrtc-offer");
+        socket.off("webrtc-ice-candidate");
         closePeerConnection();
         stopMicrophone();
       };
@@ -469,6 +495,22 @@ export default function LiveSession() {
                   {cls.isActive ? "LIVE NOW" : "Scheduled"}
                 </span>
                 <h2 className="text-xl font-bold mt-2">{cls.sessionTitle}</h2>
+                {!cls.isActive && cls.scheduledDate && (
+                  <div className="flex gap-4 mt-2 text-sm text-gray-500 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <FiCalendar className="text-indigo-500" />
+                      {new Date(cls.scheduledDate).toLocaleDateString(undefined, { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <FiClock className="text-indigo-500" />
+                      {cls.scheduledTime || "TBA"}
+                    </span>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => handleJoinSession(cls)}
