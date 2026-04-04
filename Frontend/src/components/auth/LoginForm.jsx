@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiLock, FiKey, FiShield, FiUser } from "react-icons/fi";
 import InputField from "./InputField";
 import { loginOrg, loginTeacher, loginStudent } from "../../api/auth";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../context/AuthContext";
 
 const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
   const navigate = useNavigate();
@@ -71,6 +71,9 @@ const LoginForm = ({ onToggleForm, onClose, showToast, switchMode }) => {
       }
 
       if (response.status === 200) {
+        // Persist session in AuthContext and localStorage
+        login(response.data);
+
         if (response.data.user.role === "organization")
           navigate("/organization/dashboard");
         if (response.data.user.role === "teacher")

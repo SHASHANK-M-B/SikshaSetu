@@ -61,7 +61,13 @@ export default function TeacherDashboard() {
       .toUpperCase(),
   };
 
-  const [active, setActive] = useState("overview");
+  const [active, setActive] = useState(
+    localStorage.getItem("teacher_active_tab") || "overview"
+  );
+
+  useEffect(() => {
+    localStorage.setItem("teacher_active_tab", active);
+  }, [active]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);

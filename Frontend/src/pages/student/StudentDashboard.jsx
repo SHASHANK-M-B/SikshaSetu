@@ -54,7 +54,13 @@ const navItems = [
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(
+    localStorage.getItem("student_active_tab") || "overview"
+  );
+  
+  useEffect(() => {
+    localStorage.setItem("student_active_tab", activeTab);
+  }, [activeTab]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
