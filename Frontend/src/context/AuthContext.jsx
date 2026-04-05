@@ -1,6 +1,7 @@
-import { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logoutUser } from '../api/auth';
+import { clearCache } from '../utils/cache';
 
 const AuthContext = createContext();
 
@@ -18,8 +19,17 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = (userData) => {
+  const login = (data) => {
+    // Standardizing user object storage
+    const userData = data.user || data;
     localStorage.setItem('userData', JSON.stringify(userData));
+    
+    // Save specific fields for convenience in legacy components
+    if (userData.teacherName) localStorage.setItem('teacherName', userData.teacherName);
+    if (userData.orgName) localStorage.setItem('organizationName', userData.orgName);
+    if (userData.studentName) localStorage.setItem('studentName', userData.studentName);
+    if (userData.role) localStorage.setItem('userRole', userData.role);
+
     setUser(userData);
   };
 
@@ -29,7 +39,8 @@ export const AuthProvider = ({ children }) => {
     } catch {
       // Silent fail
     } finally {
-      localStorage.removeItem('userData');
+      localStorage.clear();
+      clearCache();
       setUser(null);
       navigate('/');
     }
@@ -42,4 +53,12 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export default AuthContext;
+export { AuthContext };
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};

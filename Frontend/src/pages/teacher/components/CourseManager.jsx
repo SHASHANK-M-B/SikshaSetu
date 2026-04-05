@@ -6,6 +6,7 @@ import {
 } from "@/api/teacher";
 import React, { useState, useEffect } from "react";
 import { FiBook } from "react-icons/fi";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 export default function CourseManager() {
   const initialData = {
     courseName: "",
@@ -15,6 +16,7 @@ export default function CourseManager() {
   const [courses, setCourses] = useState([]);
   const [courseData, setCourseData] = useState(initialData);
   const [loading, setLoading] = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingCourseId, setLoadingCourseId] = useState(null);
   const [editCourse, setEditCourse] = useState(null);
 
@@ -28,10 +30,15 @@ export default function CourseManager() {
   };
 
   const getAllCourses = async () => {
-    const response = await getCourses();
-    setCourses(response.data.courses);
+    setLoadingInitial(true);
     try {
-    } catch (error) {}
+      const response = await getCourses();
+      setCourses(response.data.courses);
+    } catch (error) {
+      console.error("Failed to fetch courses:", error);
+    } finally {
+      setLoadingInitial(false);
+    }
   };
 
   useEffect(() => {
@@ -84,6 +91,7 @@ export default function CourseManager() {
 
   return (
     <div>
+      {loadingInitial && <LoadingScreen message="Loading courses..." />}
       <div className="max-w-3xl mx-auto space-y-6">
         <h3 className="font-bold text-2xl text-indigo-700 flex items-center gap-2">
           <FiBook /> Manage Courses
@@ -95,21 +103,24 @@ export default function CourseManager() {
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <input
-              placeholder="Course name"
+              required
+              placeholder="Course name *"
               name="courseName"
               value={courseData.courseName}
               onChange={handleChange}
               className="p-2 rounded border"
             />
             <input
-              placeholder="Course code"
+              required
+              placeholder="Course code *"
               name="courseCode"
               value={courseData.courseCode}
               onChange={handleChange}
               className="p-2 rounded border"
             />
             <input
-              placeholder="Short desc"
+              required
+              placeholder="Short desc *"
               name="shortDescription"
               value={courseData.shortDescription}
               onChange={handleChange}
@@ -178,7 +189,7 @@ export default function CourseManager() {
           <div className="bg-white p-6 rounded-xl w-[350px] shadow-xl">
             <h2 className="text-lg font-bold mb-3">Edit Course</h2>
 
-            <label className="text-sm font-semibold">Course Name</label>
+            <label className="text-sm font-semibold">Course Name <span className="text-red-500">*</span></label>
             <input
               className="border rounded-lg w-full px-3 py-2 mb-3"
               value={editCourse.courseName}
@@ -190,7 +201,7 @@ export default function CourseManager() {
               }
             />
 
-            <label className="text-sm font-semibold">Short Description</label>
+            <label className="text-sm font-semibold">Short Description <span className="text-red-500">*</span></label>
             <textarea
               className="border rounded-lg w-full px-3 py-2 mb-3"
               rows="3"

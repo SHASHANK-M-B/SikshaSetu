@@ -20,15 +20,18 @@ import {
   FiRotateCcw, // Undo Icon
   FiTrash2, // Clear Icon
 } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
 import { io } from "socket.io-client";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?worker&url";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import {
   scheduleLiveClass,
   getLiveSessions,
   startLiveSession,
   endLiveSession,
+  deleteLiveSession,
   uploadSessionMaterial,
+  uploadSlides,
   getUnderstoodCount,
   getSessionChat,
 } from "@/api/teacher";
@@ -40,15 +43,87 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 // Hardcoded for Production Deployment
 const SOCKET_URL =
   "https://sikshasetu-backend-1030932275340.asia-south1.run.app/live-session";
-
-  // Local
-  // const SOCKET_URL =
-  // "http://localhost:8928/live-session";
+// const SOCKET_URL =
+//   "http://localhost:8928/live-session";
 
 const fmt = (s) => new Date(s * 1000).toISOString().substr(11, 8);
 const uid = () => Math.random().toString(36).slice(2, 9);
 const TEACHER_ID = "TEACHER_ID_HERE";
 const TEACHER_NAME = "Teacher";
+
+// =============================
+// HELPER: Voice Visualizer Component (Google Meet Style)
+// =============================
+const VoiceVisualizer = ({ stream, isActive }) => {
+  const [level, setLevel] = useState(0);
+  const rafRef = useRef();
+
+  useEffect(() => {
+    if (!isActive || !stream) {
+      setLevel(0);
+      return;
+    }
+
+    let audioContext;
+    let analyser;
+    let source;
+
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      analyser.fftSize = 256;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const updateLevel = () => {
+        analyser.getByteFrequencyData(dataArray);
+        // Get average volume
+        const average = dataArray.reduce((p, c) => p + c, 0) / dataArray.length;
+        // Map 0-255 to 0-100, adding some sensitivity
+        const normalized = Math.min((average / 128) * 100, 100);
+        setLevel(normalized);
+        rafRef.current = requestAnimationFrame(updateLevel);
+      };
+
+      updateLevel();
+    } catch (err) {
+      console.error("Audio visualizer error:", err);
+    }
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (audioContext && audioContext.state !== "closed") {
+        audioContext.close();
+      }
+    };
+  }, [stream, isActive]);
+
+  return (
+    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-3 relative">
+      <motion.div
+        className="h-full bg-gradient-to-r from-emerald-400 via-green-500 to-emerald-400"
+        animate={{ 
+          width: `${isActive ? level : 0}%`,
+          opacity: isActive ? 1 : 0 
+        }}
+        transition={{ 
+          type: "spring", 
+          stiffness: 300, 
+          damping: 30,
+          opacity: { duration: 0.2 }
+        }}
+      />
+      {isActive && level > 5 && (
+        <motion.div 
+          className="absolute inset-0 bg-white/20"
+          animate={{ opacity: [0, 0.3, 0] }}
+          transition={{ duration: 0.5, repeat: Infinity }}
+        />
+      )}
+    </div>
+  );
+};
 
 export default function LiveClassRoom() {
   // --- STATES ---
@@ -80,6 +155,7 @@ export default function LiveClassRoom() {
   const [uploading, setUploading] = useState(false);
 
   // --- REFS ---
+  const strokesRef = useRef([]);
   const socketRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const peerConnectionsRef = useRef(new Map());
@@ -94,8 +170,13 @@ export default function LiveClassRoom() {
     lineWidth: 5,
   });
 
+  // Latest state refs to avoid stale closures in socket listeners
+  const slideIndexRef = useRef(0);
+  const slidesDeckRef = useRef([]);
+  useEffect(() => { slideIndexRef.current = slideIndex; }, [slideIndex]);
+  useEffect(() => { slidesDeckRef.current = slidesDeck; }, [slidesDeck]);
+
   // History for Undo
-  const strokesRef = useRef([]); // Stores all completed strokes
   const currentStrokeRef = useRef([]); // Stores the stroke currently being drawn
 
   // --- INITIAL LOAD ---
@@ -113,8 +194,8 @@ export default function LiveClassRoom() {
   }, []);
 
   // --- CANVAS SETUP ---
-  useEffect(() => {
-    if (canvasRef.current) {
+  const resizeCanvas = useCallback(() => {
+    if (canvasRef.current && canvasRef.current.parentElement) {
       // Set canvas size to match visual size for sharp drawing
       const parent = canvasRef.current.parentElement;
       canvasRef.current.width = parent.clientWidth;
@@ -127,7 +208,13 @@ export default function LiveClassRoom() {
       ctx.lineWidth = drawingSettings.current.lineWidth;
       ctx.strokeStyle = drawingSettings.current.color;
     }
-  }, [mode, slidesDeck, slideIndex]);
+  }, []);
+
+  useEffect(() => {
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+    return () => window.removeEventListener("resize", resizeCanvas);
+  }, [mode, slidesDeck, slideIndex, resizeCanvas]);
 
   // --- TIMER EFFECT ---
   useEffect(() => {
@@ -233,6 +320,25 @@ export default function LiveClassRoom() {
         }
       });
 
+      // FIX 4: When backend signals a student needs re-sync, 
+      // re-broadcast the current slide to everyone in the room
+      socket.on("request-slide-sync", (data) => {
+        if (!isLive) return;
+        console.log("[Sync] Received re-sync request from student:", data?.requestedBy);
+        
+        const currentIndex = slideIndexRef.current;
+        const currentSlides = slidesDeckRef.current;
+
+        if (currentSlides[currentIndex]) {
+          console.log(`[Sync] Re-broadcasting slide ${currentIndex}`);
+          socket.emit("change-slide", {
+            sessionId: currentSession.sessionId,
+            slideIndex: currentIndex,
+            slideImage: currentSlides[currentIndex].imageUrl,
+          });
+        }
+      });
+
       return () => {
         if (socket) socket.disconnect();
         peerConnectionsRef.current.forEach((pc) => pc.close());
@@ -240,7 +346,7 @@ export default function LiveClassRoom() {
         stopMicrophone();
       };
     }
-  }, [mode, currentSession, isLive, createPeerConnection]);
+  }, [mode, currentSession, isLive, createPeerConnection]); // Removed slideIndex/slidesDeck to prevent reconnection on every slide change
 
   // --- MICROPHONE LOGIC ---
   const startMicrophone = async () => {
@@ -309,9 +415,11 @@ export default function LiveClassRoom() {
       );
     }
 
-    if (socketRef.current && isLive) {
+    if (socketRef.current && isLive && currentSession?.sessionId) {
+      const sessionId = currentSession.sessionId;
+      console.log(`[Sync] Emitting change-slide for index ${newIndex} (Session: ${sessionId})`);
       socketRef.current.emit("change-slide", {
-        sessionId: currentSession.sessionId,
+        sessionId: sessionId,
         slideIndex: newIndex,
         slideImage: slidesDeck[newIndex].imageUrl,
       });
@@ -453,28 +561,68 @@ export default function LiveClassRoom() {
   };
 
   // --- API HANDLERS ---
+  // const handleScheduleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   setLoading(true);
+  //   try {
+  //     await scheduleLiveClass({ ...formData, courseId: null });
+  //     alert("Class scheduled successfully!");
+  //     setMode("list");
+  //     fetchSessions();
+  //     setFormData({
+  //       sessionTitle: "",
+  //       shortDescription: "",
+  //       sessionHeading: "",
+  //       date: "",
+  //       time: "",
+  //     });
+  //   } catch (error) {
+  //     console.error(error);
+  //     alert("Failed to schedule class");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const handleScheduleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await scheduleLiveClass({ ...formData, courseId: null });
-      alert("Class scheduled successfully!");
-      setMode("list");
-      fetchSessions();
-      setFormData({
-        sessionTitle: "",
-        shortDescription: "",
-        sessionHeading: "",
-        date: "",
-        time: "",
-      });
-    } catch (error) {
-      console.error(error);
-      alert("Failed to schedule class");
-    } finally {
-      setLoading(false);
-    }
+  e.preventDefault();
+  setLoading(true);
+
+  // 1. Create a clean payload without courseId for now
+  const payload = {
+    sessionTitle: formData.sessionTitle,
+    shortDescription: formData.shortDescription,
+    sessionHeading: formData.sessionHeading,
+    date: formData.date,
+    time: formData.time,
   };
+
+  try {
+    // 2. Call the API with the clean payload
+    await scheduleLiveClass(payload);
+
+    alert("Class scheduled successfully!");
+    setMode("list");
+    fetchSessions();
+
+    // 3. Reset form
+    setFormData({
+      sessionTitle: "",
+      shortDescription: "",
+      sessionHeading: "",
+      date: "",
+      time: "",
+    });
+  } catch (error) {
+    // 4. Enhanced Logging: This tells you exactly what the backend didn't like
+    const errorMessage = error.response?.data?.message || "Failed to schedule class";
+    console.error("Schedule Error Details:", error.response?.data || error.message);
+    
+    alert(`Error: ${errorMessage}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleEnterSession = async (session) => {
     setCurrentSession(session);
@@ -492,17 +640,33 @@ export default function LiveClassRoom() {
   };
 
   const handleStartLive = async () => {
-    if (slidesDeck.length === 0) {
-      alert("Please upload slides (PDF) before starting the session.");
+    if (!currentSession) return;
+    
+    // PHASE 4: Check if slides are uploaded before going live
+    if (!slidesDeck || slidesDeck.length === 0) {
+      alert("Please upload slides (PDF) before going live.");
       return;
     }
+
     try {
       setLoading(true);
+      
+      // Ensure microphone is ready
       await startMicrophone();
-      await startLiveSession(currentSession.sessionId);
+      
+      // OPTIMIZATION: Don't send the large slide image again here.
+      // It was already uploaded and stored in Firestore via uploadSlides().
+      // This prevents PayloadTooLargeError and server crashes.
+      const response = await startLiveSession(currentSession.sessionId, {
+        currentSlideIndex: 0,
+      });
+      console.log("Session start response:", response);
+
       setIsLive(true);
       setMode("live");
-      if (slidesDeck.length > 0) {
+
+      // Once live, sync the first slide to the socket
+      if (slidesDeck.length > 0 && socketRef.current) {
         socketRef.current.emit("change-slide", {
           sessionId: currentSession.sessionId,
           slideIndex: 0,
@@ -510,8 +674,10 @@ export default function LiveClassRoom() {
         });
       }
     } catch (error) {
-      console.error("Start live error:", error);
-      alert("Failed to start session");
+      console.error("Start live error details:", error);
+      const serverMsg = error.response?.data?.message || error.message;
+      const debugInfo = error.response?.data?.error ? `\n\nDebug: ${error.response.data.error}` : "";
+      alert(`Failed to start session: ${serverMsg}${debugInfo}`);
     } finally {
       setLoading(false);
     }
@@ -522,6 +688,12 @@ export default function LiveClassRoom() {
     try {
       setLoading(true);
       await endLiveSession(currentSession.sessionId);
+      
+      // Notify students via socket
+      if (socketRef.current) {
+        socketRef.current.emit("end-session", { sessionId: currentSession.sessionId });
+      }
+
       stopMicrophone();
       setIsLive(false);
       peerConnectionsRef.current.forEach((pc) => pc.close());
@@ -531,6 +703,22 @@ export default function LiveClassRoom() {
     } catch (error) {
       console.error("End live error:", error);
       alert("Failed to end session");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteLiveSession = async (sessionId) => {
+    if (!window.confirm("Are you sure you want to permanently delete this session? This action cannot be undone.")) return;
+    try {
+      setLoading(true);
+      const res = await deleteLiveSession(sessionId);
+      alert("Session deleted successfully");
+      fetchSessions();
+    } catch (error) {
+      console.error("Delete session error:", error);
+      const serverMsg = error.response?.data?.message || error.message;
+      alert(`Failed to delete session: ${serverMsg}`);
     } finally {
       setLoading(false);
     }
@@ -578,9 +766,12 @@ export default function LiveClassRoom() {
       const pdf = await pdfjsLib.getDocument(url).promise;
       const slides = [];
 
-      for (let i = 1; i <= pdf.numPages; i++) {
+      // Optimize: Limit pages or lower scale for very large PDFs to prevent browser crash
+      const totalPages = Math.min(pdf.numPages, 100); // Guard: limit to first 100 pages
+      const scale = 1.2; // Fixed safe scale
+
+      for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
-        const scale = window.innerWidth > 1024 ? 1.5 : 1.0;
         const viewport = page.getViewport({ scale });
 
         const canvas = document.createElement("canvas");
@@ -592,13 +783,28 @@ export default function LiveClassRoom() {
 
         slides.push({
           id: uid(),
-          imageUrl: canvas.toDataURL("image/jpeg", 0.8),
+          imageUrl: canvas.toDataURL("image/jpeg", 0.7), // Lower quality for memory efficiency
           title: `Slide ${i}`,
         });
       }
       setSlidesDeck(slides);
       setSlideIndex(0);
       URL.revokeObjectURL(url);
+
+      // Persist slides to Firestore immediately in Prep mode to avoid race conditions
+      if (slides.length > 0 && currentSession) {
+        try {
+          const slideMetadata = slides.map((s, i) => ({
+            id: s.id,
+            imageUrl: s.imageUrl,
+            title: s.title || `Slide ${i + 1}`
+          }));
+          await uploadSlides(currentSession.sessionId, { slides: slideMetadata });
+          console.log("Slides persisted to Firestore in Prep mode.");
+        } catch (metadataError) {
+          console.warn("Failed to persist slide metadata in Prep mode:", metadataError);
+        }
+      }
 
       if (isLive && socketRef.current && slides.length > 0) {
         socketRef.current.emit("change-slide", {
@@ -608,8 +814,11 @@ export default function LiveClassRoom() {
         });
       }
     } catch (e) {
-      console.error("PDF Render error", e);
-      alert("Failed to render PDF slides.");
+      console.error("PDF Render error:", e);
+      alert("Failed to render PDF slides. The file might be too large or corrupted.");
+    } finally {
+      // Ensure uploading state is cleared
+      setUploading(false);
     }
   };
 
@@ -683,12 +892,25 @@ export default function LiveClassRoom() {
                 <p className="text-sm text-gray-500 mb-4 line-clamp-2">
                   {session.shortDescription}
                 </p>
-                <button
-                  onClick={() => handleEnterSession(session)}
-                  className="w-full py-2.5 rounded-xl bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100 transition"
-                >
-                  {session.isActive ? "Re-join Session" : "Enter Classroom"}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEnterSession(session)}
+                    className="flex-1 py-2.5 rounded-xl bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100 transition"
+                  >
+                    {session.isActive ? "Re-join Session" : "Enter Classroom"}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Use id or sessionId, whichever is available
+                      handleDeleteLiveSession(session.id || session.sessionId);
+                    }}
+                    className="p-2.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition shadow-sm border border-red-100"
+                    title="Delete Session"
+                  >
+                    <FiTrash2 size={20} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -701,7 +923,7 @@ export default function LiveClassRoom() {
           <form onSubmit={handleScheduleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Session Title
+                Session Title <span className="text-red-500">*</span>
               </label>
               <input
                 required
@@ -714,9 +936,10 @@ export default function LiveClassRoom() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Heading / Topic
+                Heading / Topic <span className="text-red-500">*</span>
               </label>
               <input
+                required
                 className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-black"
                 value={formData.sessionHeading}
                 onChange={(e) =>
@@ -727,7 +950,7 @@ export default function LiveClassRoom() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date
+                  Date <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
@@ -741,7 +964,7 @@ export default function LiveClassRoom() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Time
+                  Time <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="time"
@@ -756,10 +979,12 @@ export default function LiveClassRoom() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
+                Description <span className="text-red-500">*</span>
               </label>
               <textarea
-                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-black h-24"
+                required
+                rows={3}
+                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-black resize-none"
                 value={formData.shortDescription}
                 onChange={(e) =>
                   setFormData({ ...formData, shortDescription: e.target.value })
@@ -780,20 +1005,28 @@ export default function LiveClassRoom() {
       {(mode === "prep" || mode === "live") && currentSession && (
         <div className="w-full max-w-7xl flex flex-col lg:flex-row gap-6">
           <div className="flex-1 space-y-4">
-            <div className="bg-black/5 rounded-2xl p-2 border border-gray-200 min-h-[500px] flex flex-col justify-center items-center relative overflow-hidden group">
+            <div className="bg-black/95 rounded-2xl p-2 border border-black flex flex-col justify-center items-center relative overflow-hidden group shadow-2xl" style={{ minHeight: "600px" }}>
               {slidesDeck.length > 0 ? (
-                <div className="relative w-full h-full flex justify-center items-center">
-                  <img
-                    src={slidesDeck[slideIndex].imageUrl}
-                    className="max-h-[500px] max-w-full object-contain shadow-2xl rounded-lg"
-                    alt="Slide"
-                  />
+                <div className="relative w-full h-full flex justify-center items-center overflow-hidden">
+                  {slidesDeck[slideIndex] ? (
+                    <img
+                      src={slidesDeck[slideIndex].imageUrl}
+                      className="max-h-full max-w-full object-contain shadow-2xl transition-transform duration-300"
+                      alt="Slide"
+                      onLoad={resizeCanvas}
+                      style={{ WebkitUserSelect: "none" }}
+                    />
+                  ) : (
+                    <div className="text-white">Rendering slides...</div>
+                  )}
                   <canvas
                     ref={canvasRef}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-crosshair"
                     style={{
-                      width: "100%",
-                      height: "100%",
+                      width: "auto",
+                      height: "auto",
+                      maxWidth: "100%",
+                      maxHeight: "100%",
                       touchAction: "none",
                     }}
                     onMouseDown={startDrawing}
@@ -805,7 +1038,7 @@ export default function LiveClassRoom() {
                     onTouchEnd={stopDrawing}
                   />
                   {/* UNDO / CLEAR BUTTONS (Shows on Hover) */}
-                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-2 rounded-lg shadow-lg flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-2 rounded-lg shadow-lg flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                     <button
                       onClick={handleUndo}
                       className="p-2 hover:bg-gray-100 rounded-lg text-gray-700"
@@ -913,6 +1146,17 @@ export default function LiveClassRoom() {
                   {isMuted ? <FiMicOff /> : <FiMic />}{" "}
                   {isMuted ? "Unmute Mic" : "Mute Mic"}
                 </button>
+                
+                {/* Visualizer below the button */}
+                <VoiceVisualizer 
+                  stream={mediaStreamRef.current} 
+                  isActive={!isMuted} 
+                />
+                {!isMuted && (
+                  <p className="text-[9px] text-emerald-600 font-bold mt-1 text-center animate-pulse uppercase tracking-wider">
+                    Mic is picking up audio
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-green-50 p-2 rounded-xl border border-green-100 text-center">

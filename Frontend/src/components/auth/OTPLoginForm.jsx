@@ -10,7 +10,7 @@ import {
   requestStudentOtp,
   verifyStudentOtp,
 } from "../../api/auth";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../context/AuthContext";
 
 const OTPLoginForm = ({ switchMode, showToast }) => {
   const navigate = useNavigate();

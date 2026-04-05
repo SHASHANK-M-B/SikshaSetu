@@ -32,6 +32,8 @@ import NavButton from "./components/ui/NavButton";
 import { logoutUser } from "@/api/auth";
 import { useNavigate } from "react-router-dom";
 import { teacherDashbaord } from "@/api/teacher";
+import LoadingScreen from "@/components/ui/LoadingScreen";
+import { getCache, setCache } from "@/utils/cache";
 
 export default function TeacherDashboard() {
   // Load saved org/teacher name from localStorage
@@ -42,13 +44,26 @@ export default function TeacherDashboard() {
   const teacherName = localStorage.getItem("teacherName") || "Demo Teacher";
   const [teacherData, setTeacherData] = useState([]);
     useEffect(() => {
-      const teacherData = async () => {
+      const fetchTeacherData = async () => {
+        const cachedData = getCache("teacher_dashboard");
+        if (cachedData) {
+          setTeacherData(cachedData);
+          setLoading(false);
+          return;
+        }
+
+        setLoading(true);
         try {
           const response = await teacherDashbaord();
           setTeacherData(response.data);
-        } catch (error) {}
+          setCache("teacher_dashboard", response.data, 10); // Cache for 10 minutes
+        } catch (error) {
+          console.error("Failed to fetch teacher dashboard data:", error);
+        } finally {
+          setLoading(false);
+        }
       };
-      teacherData();
+      fetchTeacherData();
     }, []);
 
   const user = {
@@ -61,7 +76,13 @@ export default function TeacherDashboard() {
       .toUpperCase(),
   };
 
-  const [active, setActive] = useState("overview");
+  const [active, setActive] = useState(
+    localStorage.getItem("teacher_active_tab") || "overview"
+  );
+
+  useEffect(() => {
+    localStorage.setItem("teacher_active_tab", active);
+  }, [active]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -98,10 +119,13 @@ export default function TeacherDashboard() {
     try {
       const response = await logoutUser();
       if (response.status === 200) {
-        setLoading(false);
         navigate("/");
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleNavClick = (key) => {
@@ -113,6 +137,7 @@ export default function TeacherDashboard() {
 
   return (
     <>
+      {loading && <LoadingScreen message={active === "logout" ? "Logging out" : "Loading Workspace"} />}
       <style>{`
         ::-webkit-scrollbar { width: 0; height: 0; }
         * { scrollbar-width: none; }

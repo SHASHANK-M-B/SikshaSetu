@@ -13,6 +13,7 @@ import {
   FiTrash2,
   FiRefreshCw,
 } from "react-icons/fi";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 const uid = (p = "") => p + Math.random().toString(36).slice(2, 9);
 
@@ -142,6 +143,7 @@ export default function DiscussionDoubts() {
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 space-y-6">
+      {loading && doubts.length === 0 && <LoadingScreen message="Loading Discussions..." />}
       {/* HEADER & REFRESH */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Student Doubts</h2>
@@ -166,9 +168,10 @@ export default function DiscussionDoubts() {
 
         <div className="flex flex-col sm:flex-row gap-2">
           <input
+            required
             value={teacherMsg}
             onChange={(e) => setTeacherMsg(e.target.value)}
-            placeholder="Type an announcement for all students..."
+            placeholder="Type an announcement for all students... *"
             className="flex-1 border border-blue-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
           />
 
@@ -286,9 +289,10 @@ export default function DiscussionDoubts() {
               <div className="mt-4 animate-in slide-in-from-top-2 fade-in">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
+                    required
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Write a clear explanation..."
+                    placeholder="Write a clear explanation... *"
                     className="flex-1 border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
                     autoFocus
                   />

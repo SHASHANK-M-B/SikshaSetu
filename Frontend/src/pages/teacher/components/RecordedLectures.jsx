@@ -23,6 +23,7 @@ import {
   updateRecordedLecture,
   uploadRecordedLecture,
 } from "@/api/teacher";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 // Set PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -188,6 +189,58 @@ const GlobalStyle = () => (
 );
 
 // =============================
+// HELPER: Voice Visualizer Component
+// =============================
+const VoiceVisualizer = ({ stream, isRecording }) => {
+  const [volume, setVolume] = useState(0);
+  const rafRef = useRef();
+
+  useEffect(() => {
+    if (!isRecording || !stream) {
+      setVolume(0);
+      return;
+    }
+
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = audioContext.createAnalyser();
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    analyser.fftSize = 256;
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const updateVolume = () => {
+      analyser.getByteFrequencyData(dataArray);
+      const average = dataArray.reduce((p, c) => p + c, 0) / dataArray.length;
+      setVolume(average);
+      rafRef.current = requestAnimationFrame(updateVolume);
+    };
+
+    updateVolume();
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      if (audioContext.state !== "closed") {
+        audioContext.close();
+      }
+    };
+  }, [stream, isRecording]);
+
+  return (
+    <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mt-2 relative">
+      <motion.div
+        className="h-full bg-gradient-to-r from-green-400 to-green-600"
+        initial={{ width: "0%" }}
+        animate={{ width: `${Math.min(volume * 1.5, 100)}%` }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      />
+      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-gray-600">
+        RECOGNIZING VOICE...
+      </div>
+    </div>
+  );
+};
+
+// =============================
 // PREMIUM PURPLE UI GRADIENTS
 // =============================
 const glass = "backdrop-blur-xl bg-white/50 border border-white/70";
@@ -232,6 +285,11 @@ export default function RecordedLectures() {
   const [filterType, setFilterType] = useState("recent");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Refs for Viewer Sync
+  const viewerAudioRef = useRef(null);
+  const isAutoSwitching = useRef(false);
 
   // =================================
   // LOAD & SAVE LECTURES
@@ -547,9 +605,26 @@ export default function RecordedLectures() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: "audio/webm",
-      });
+      // Try multiple MIME types for better compatibility
+      const mimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
+        "",
+      ];
+      let selectedMime = "";
+      for (const mime of mimeTypes) {
+        if (mime === "" || MediaRecorder.isTypeSupported(mime)) {
+          selectedMime = mime;
+          break;
+        }
+      }
+
+      mediaRecorderRef.current = new MediaRecorder(
+        stream,
+        selectedMime ? { mimeType: selectedMime } : {}
+      );
       audioChunks.current = [];
 
       mediaRecorderRef.current.ondataavailable = (e) => {
@@ -637,14 +712,74 @@ export default function RecordedLectures() {
     if (audioEl) {
       audioEl.load();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSlideIndex]);
 
+  // =================================
+  // VIEWER SYNC LOGIC
+  // =================================
+  useEffect(() => {
+    if (mode === "viewer" && viewLecture && viewerAudioRef.current) {
+      const audio = viewerAudioRef.current;
+      const mapping = viewLecture.slideAudioMapping || {};
+
+      const handleTimeUpdate = () => {
+        if (isAutoSwitching.current) return;
+
+        const currentTime = audio.currentTime;
+        const entries = Object.entries(mapping)
+          .map(([idx, time]) => ({ idx: parseInt(idx), time }))
+          .sort((a, b) => a.time - b.time);
+
+        // Find the slide that should be active at this time
+        let correctSlideIdx = 0;
+        for (let i = entries.length - 1; i >= 0; i--) {
+          if (currentTime >= entries[i].time) {
+            correctSlideIdx = entries[i].idx;
+            break;
+          }
+        }
+
+        if (correctSlideIdx !== selectedSlideIndex) {
+          isAutoSwitching.current = true;
+          setSelectedSlideIndex(correctSlideIdx);
+          // Reset flag after a small delay to prevent loops
+          setTimeout(() => {
+            isAutoSwitching.current = false;
+          }, 100);
+        }
+      };
+
+      audio.addEventListener("timeupdate", handleTimeUpdate);
+      return () => audio.removeEventListener("timeupdate", handleTimeUpdate);
+    }
+  }, [mode, viewLecture, selectedSlideIndex]);
+
+  // Seek audio when slide is manually changed in viewer
+  useEffect(() => {
+    if (
+      mode === "viewer" &&
+      viewLecture &&
+      viewerAudioRef.current &&
+      !isAutoSwitching.current
+    ) {
+      const mapping = viewLecture.slideAudioMapping || {};
+      const startTime = mapping[selectedSlideIndex];
+      if (startTime !== undefined) {
+        viewerAudioRef.current.currentTime = startTime;
+      }
+    }
+  }, [selectedSlideIndex, mode, viewLecture]);
+
   const getListOfLectures = async () => {
+    setLoading(true);
     try {
       const response = await getListOfRecordedLecture();
       setLectures(response.data.contents);
-    } catch (error) {}
+    } catch (error) {
+      console.error("Failed to fetch recorded lectures:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updatesRecordedLecture = async (id, data) => {
@@ -654,10 +789,17 @@ export default function RecordedLectures() {
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to permanently delete this recorded lecture? This action cannot be undone.")) {
+      return;
+    }
     try {
       await deleteRecordedLecture(id);
       await getListOfLectures();
-    } catch (error) {}
+      alert("Recorded lecture deleted successfully.");
+    } catch (error) {
+      console.error("Delete failed:", error);
+      alert("Failed to delete the lecture. Please try again.");
+    }
   };
 
   const handleEdit = (lec) => {
@@ -685,6 +827,7 @@ export default function RecordedLectures() {
   // =================================
   return (
     <div className="min-h-screen">
+      {loading && <LoadingScreen message="Fetching Recorded Lectures" />}
       <GlobalStyle />
 
       {/* ================================
@@ -719,7 +862,8 @@ export default function RecordedLectures() {
           {/* TITLE INPUT */}
           <input
             type="text"
-            placeholder="Enter lecture title"
+            required
+            placeholder="Enter lecture title *"
             className="w-full mt-4 p-3 text-lg rounded-xl border border-purple-300 focus:ring-2 focus:ring-purple-500"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -794,7 +938,7 @@ export default function RecordedLectures() {
                     }`}
                   >
                     <img
-                      src={slide?.url}
+                      src={slide}
                       className="rounded-lg shadow-md aspect-[4/3] object-contain bg-white"
                     />
 
@@ -869,6 +1013,14 @@ export default function RecordedLectures() {
                       <FiStopCircle /> Stop
                     </button>
                   )}
+                </div>
+
+                {/* VOICE VISUALIZER */}
+                <div className="mt-2 max-w-sm mx-auto">
+                  <VoiceVisualizer
+                    stream={mediaStreamRef.current}
+                    isRecording={isRecording}
+                  />
                 </div>
 
                 {/* SLIDE AUDIO PLAYER */}
@@ -1254,11 +1406,13 @@ export default function RecordedLectures() {
 
     {/* AUDIO PLAYER */}
     {viewLecture.slideAudioMapping?.[selectedSlideIndex] !== undefined ? (
-      <audio controls className="w-full mt-4 rounded-lg">
-        <source
-          src={viewLecture.audio?.url}
-          type="audio/wav"
-        />
+      <audio
+        ref={viewerAudioRef}
+        controls
+        className="w-full mt-4 rounded-lg"
+        id="viewer-audio"
+      >
+        <source src={viewLecture.audio?.url} type="audio/wav" />
         Your browser does not support the audio element.
       </audio>
     ) : (
@@ -1275,7 +1429,7 @@ export default function RecordedLectures() {
           <div className="bg-white p-6 rounded-xl w-[350px] shadow-xl">
             <h2 className="text-lg font-bold mb-3">Edit Course</h2>
 
-            <label className="text-sm font-semibold">Course Name</label>
+            <label className="text-sm font-semibold">Lecture Title <span className="text-red-500">*</span></label>
             <input
               className="border rounded-lg w-full px-3 py-2 mb-3"
               value={lectureData?.title}

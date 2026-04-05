@@ -9,24 +9,29 @@ import {
 import OverviewCard from "./ui/OverviewCard";
 import AlertBox from "./ui/AlertBox";
 import { getStudentDashboard } from "@/api/student";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 export default function Overview({ studentDetails, quizItems }) {
   const pendingQuizzes = quizItems.filter((q) => q.status === "Pending").length;
 
   const [studentDetailss, setStudentDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     const fetchStudentDetails = async () => {
       try {
         const response = await getStudentDashboard();
         setStudentDetails(response.data);
       } catch (error) {
-        // alert("Error fetching student name", error);
+        console.error("Error fetching student name", error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchStudentDetails();
   }, []);
   return (
     <div className="space-y-10">
+      {loading && <LoadingScreen message="Loading Student Overview..." />}
       <div>
         <h2 className="text-4xl font-extrabold text-indigo-600">
           Hello, {studentDetailss?.studentName}! 👋
