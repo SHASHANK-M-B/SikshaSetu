@@ -2,6 +2,7 @@ import { uploadResources } from "@/api/teacher";
 import { FastForward } from "lucide-react";
 import React, { useState } from "react";
 import { FiFileText, FiLink, FiImage, FiTrash2, FiEye } from "react-icons/fi";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 export default function CourseResources() {
   const [resources, setResources] = useState([]);
@@ -69,6 +70,7 @@ export default function CourseResources() {
 
   return (
     <div className="w-full max-w-3xl mx-auto p-5">
+      {loading && <LoadingScreen message="Uploading Resource..." />}
       {/* UPLOAD */}
       <div className="bg-white rounded-2xl p-6 shadow-xl border mb-6">
         <h2 className="text-2xl font-bold mb-6">Upload Resource</h2>

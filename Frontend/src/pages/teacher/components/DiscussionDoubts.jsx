@@ -13,6 +13,7 @@ import {
   FiTrash2,
   FiRefreshCw,
 } from "react-icons/fi";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 const uid = (p = "") => p + Math.random().toString(36).slice(2, 9);
 
@@ -142,6 +143,7 @@ export default function DiscussionDoubts() {
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 space-y-6">
+      {loading && doubts.length === 0 && <LoadingScreen message="Loading Discussions..." />}
       {/* HEADER & REFRESH */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Student Doubts</h2>

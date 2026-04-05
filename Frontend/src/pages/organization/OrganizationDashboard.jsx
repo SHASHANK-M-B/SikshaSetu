@@ -19,6 +19,8 @@ import StudentModal from "./components/StudentModal";
 import TeacherModal from "./components/TeacherModal";
 import { getOrgData, logoutUser } from "@/api/auth";
 import { useNavigate } from "react-router-dom";
+import LoadingScreen from "@/components/ui/LoadingScreen";
+import { getCache, setCache } from "@/utils/cache";
 
 // localStorage helpers
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -141,6 +143,7 @@ export default function OrganizationDashboard({
 
   // MOBILE SIDEBAR STATE
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [organisationData, setOrganisationData] = useState(null);
 
   // ORGANIZATION LOGO (persisted in localStorage)
@@ -275,33 +278,45 @@ export default function OrganizationDashboard({
     setShowDpModal(false);
   };
   useEffect(() => {
-    const fetchOrganizations = async () => {
+    const fetchOrgData = async () => {
+      const cachedData = getCache("org_dashboard");
+      if (cachedData) {
+        setOrganisationData(cachedData);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
         const response = await getOrgData();
-        if (response.status === 200) {
-          setOrganisationData(response.data || []);
-        }
-      } catch {
-        // showToast("error", "Failed to load organizations");
+        setOrganisationData(response.data);
+        setCache("org_dashboard", response.data, 10); // Cache for 10 minutes
+      } catch (error) {
+        console.error("Failed to fetch organisation dashboard data:", error);
       } finally {
-        // setLoadingOrgs(false);
+        setLoading(false);
       }
     };
-
-    fetchOrganizations();
+    fetchOrgData();
   }, []);
 
   const logout = async () => {
+    setLoading(true);
     try {
       const response = await logoutUser();
       if (response.status === 200) {
         navigate("/");
       }
-    } catch (error) {}
+    } catch (error) {
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <>
+      {loading && <LoadingScreen message="Loading Organization Workspace" />}
+      <div className="flex min-h-screen bg-gray-50">
       {/* MOBILE TOP BAR */}
       <div className="lg:hidden fixed top-0 left-0 w-full h-16 bg-white shadow flex items-center justify-between px-4 z-40">
         <div className="flex items-center gap-3">
@@ -553,5 +568,6 @@ export default function OrganizationDashboard({
         </div>
       )}
     </div>
+    </>
   );
 }

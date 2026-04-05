@@ -23,6 +23,7 @@ import {
   updateRecordedLecture,
   uploadRecordedLecture,
 } from "@/api/teacher";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 // Set PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -284,6 +285,7 @@ export default function RecordedLectures() {
   const [filterType, setFilterType] = useState("recent");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Refs for Viewer Sync
   const viewerAudioRef = useRef(null);
@@ -769,10 +771,15 @@ export default function RecordedLectures() {
   }, [selectedSlideIndex, mode, viewLecture]);
 
   const getListOfLectures = async () => {
+    setLoading(true);
     try {
       const response = await getListOfRecordedLecture();
       setLectures(response.data.contents);
-    } catch (error) {}
+    } catch (error) {
+      console.error("Failed to fetch recorded lectures:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updatesRecordedLecture = async (id, data) => {
@@ -820,6 +827,7 @@ export default function RecordedLectures() {
   // =================================
   return (
     <div className="min-h-screen">
+      {loading && <LoadingScreen message="Fetching Recorded Lectures" />}
       <GlobalStyle />
 
       {/* ================================
